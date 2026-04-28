@@ -1,88 +1,84 @@
 # HomeCore AI Server
 
-这是一个基于 FastAPI 构建的高性能、模块化本地 AI 模型服务平台。它将多种 AI 模型（LLM, ASR, TTS, Voiceprint）集成在一起，并提供统一的 **OpenAI 兼容接口**。
+一个为本地推理优化的、生产级别的 AI 模型管理与分发平台。基于 FastAPI 和 Next.js 构建，旨在为 macOS (Apple Silicon) 用户提供极致的本地 AI 体验。
 
-## 核心特性
+## 🌟 核心特性
 
-- **OpenAI 标准兼容**: 提供 `/v1/chat/completions`, `/v1/audio/transcriptions`, `/v1/audio/speech` 等标准接口，可直接对接任何支持 OpenAI 协议的客户端。
-- **延迟加载 (Lazy Loading)**: 模型仅在第一次请求时加载，节省启动时间和内存。
-- **自动卸载 (Auto Unloading)**: 监控模型空闲状态，超时（默认 10 分钟）未使用的模型将自动从显存/内存中释放。
-- **Mac 性能优化**: 针对 Apple Silicon 深度优化，支持 MPS 加速和 MLX 框架。
-- **模块化架构**: 插件化的 Provider 设计，方便快速接入新模型。
+- **🚀 全能模型支持**：
+  - **Chat**: 支持 Qwen, Llama3, GLM 等主流大模型。
+  - **ASR (语音转文字)**: 集成 SenseVoice, Qwen-Audio, Vosk。
+  - **TTS (文字转语音)**: 集成 Kokoro, VoxCPM, Qwen-TTS, Edge-TTS。
+- **🔌 OpenAI 兼容**：标准化的 `/v1/chat/completions`、`/v1/audio/transcriptions` 和 `/v1/audio/speech` 接口，可无缝接入 Dify、FastGPT 等客户端。
+- **📊 现代化管理面板**：
+  - **可视化仪表盘**: 实时监控系统请求量、Token 消耗及响应时长。
+  - **Token 管理**: 自定义多组 API Key，支持权限控制。
+  - **调用日志**: 详尽的请求历史审计，包含耗时和 Token 统计。
+  - **全能演练场 (Playground)**: 内置聊天、ASR 转录、TTS 合成试听功能。
+- **🧠 自动化模型管理**：
+  - **延迟加载**: 只有在接口被调用时才加载模型。
+  - **超时自动卸载**: 默认 10 分钟无调用自动释放显存/内存。
+- **🌓 极致设计**: 支持深色/浅色模式切换，响应式布局。
 
-## 支持的模型
+## 🛠️ 技术栈
 
-### ASR (语音转文字)
-- **SenseVoice**: 高精度、多语言语音识别。
-- **Vosk**: 轻量级离线识别。
-- **Qwen3-ASR**: 基于 MLX 的高性能 ASR。
+- **Backend**: Python 3.11, FastAPI, Uvicorn, SQLModel (SQLite).
+- **Frontend**: Next.js 14, Tailwind CSS, Lucide Icons, Recharts.
+- **ML Engine**: MLX (optimized for Apple Silicon).
 
-### TTS (文字转语音)
-- **Kokoro**: 超高质量、轻量级本地 TTS。
-- **Qwen3-TTS**: 支持声音克隆和捏人 (Voice Design)。
-- **Edge-TTS**: 微软云端高质量语音。
-- **OmniVoice / VoxCPM**: 多种本地推理引擎。
-
-### LLM (大语言模型)
-- **Ollama Proxy**: 代理并转发请求至本地运行的 Ollama。
-
-## 快速开始
+## 🚀 快速开始
 
 ### 1. 准备环境
-建议使用 Conda：
 ```bash
+# 创建并激活 Conda 环境
 conda create -n homecore-ai python=3.11
 conda activate homecore-ai
+
+# 安装 Python 依赖
 pip install -r requirements.txt
+
+# 安装前端依赖
+cd dashboard
+npm install
+cd ..
 ```
 
-### 2. 配置模型
-编辑 `config.py` 来配置你的模型 Repository ID 或本地路径。
+### 2. 启动服务
 
-### 3. 启动服务
+#### 开发模式 (支持前端热更新)
 ```bash
+# 窗口 A: 启动前端开发服务器
+cd dashboard
+npm run dev
+
+# 窗口 B: 启动后端代理
+DEV_MODE=true python main.py
+```
+访问：`http://localhost:8001`
+
+#### 生产模式
+```bash
+# 编译前端
+cd dashboard
+npm run build
+cd ..
+
+# 启动全栈服务器
 python main.py
 ```
-服务默认运行在 [http://localhost:8001](http://localhost:8001)。
+访问：`http://localhost:8001`
 
-## API 使用示例
+## 📖 API 接口说明
 
-### 对话 (LLM)
-```bash
-curl http://localhost:8001/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "qwen2.5-coder:7b",
-    "messages": [{"role": "user", "content": "你好"}],
-    "stream": true
-  }'
-```
+| 接口类型 | 端点 | 描述 |
+| :--- | :--- | :--- |
+| **Chat** | `/v1/chat/completions` | 文本对话生成 |
+| **ASR** | `/v1/audio/transcriptions` | 语音转文字 (支持文件上传) |
+| **TTS** | `/v1/audio/speech` | 文字转语音 (返回音频流) |
+| **Admin** | `/v1/admin/*` | 系统状态、Token 及日志管理 |
 
-### 语音识别 (ASR)
-```bash
-curl http://localhost:8001/v1/audio/transcriptions \
-  -F "file=@test.wav" \
-  -F "model=sensevoice"
-```
+## ⚙️ 配置文件
+修改根目录下的 `config.py` 来配置模型路径、数据库连接及模型自动卸载时长。
 
-### 语音合成 (TTS)
-```bash
-curl http://localhost:8001/v1/audio/speech \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "kokoro",
-    "input": "欢迎使用本地 AI 服务",
-    "voice": "af_heart"
-  }' --output output.wav
-```
+---
 
-## 项目结构
-
-- `app/api/v1/`: 标准 API 实现层。
-- `app/core/`: 核心逻辑（ModelManager 等）。
-- `app/providers/`: 模型适配器。
-- `app/schemas/`: OpenAI 数据协议定义。
-- `config.py`: 统一配置中心。
-
-## License
-MIT
+*Built with ❤️ by Antigravity*

@@ -3,6 +3,9 @@ from fastapi.responses import StreamingResponse
 from app.schemas.openai import ChatCompletionRequest
 from app.providers.llm.ollama_provider import OllamaProvider
 
+from app.core.database import db
+import time
+
 router = APIRouter(prefix="/v1/chat")
 
 ollama_provider = OllamaProvider()

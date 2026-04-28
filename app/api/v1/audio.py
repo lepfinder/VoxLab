@@ -2,9 +2,10 @@ import io
 import uuid
 import os
 import tempfile
+import subprocess
 import soundfile as sf
 import numpy as np
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Response, Request
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
@@ -33,12 +34,14 @@ voxcpm_provider = VoxCPMProvider()
 
 @router.post("/transcriptions", response_model=TranscriptionResponse)
 async def transcriptions(
+    request: Request,
     file: UploadFile = File(...),
     model: str = Form("sensevoice")
 ):
     """
     OpenAI 兼容的 ASR 接口
     """
+    request.state.model_name = model
     content = await file.read()
     
     # 根据模型需求准备数据
@@ -71,37 +74,38 @@ async def transcriptions(
     return TranscriptionResponse(text=text)
 
 @router.post("/speech")
-async def speech(request: SpeechRequest):
+async def speech(request_body: SpeechRequest, request: Request):
     """
     OpenAI 兼容的 TTS 接口，支持多种本地和云端模型
     """
-    model_key = request.model.lower()
+    request.state.model_name = request_body.model
+    model_key = request_body.model.lower()
     output_path = None
     audio_bytes = None
 
     try:
         if "edge" in model_key:
-            audio_bytes = await edge_tts_provider.generate(request.input, request.voice)
+            audio_bytes = await edge_tts_provider.generate(request_body.input, request_body.voice)
             
         elif "kokoro" in model_key:
-            lang_code = request.voice[0] if request.voice else 'a'
+            lang_code = request_body.voice[0] if request_body.voice else 'a'
             provider = KokoroProvider(lang_code=lang_code)
-            audio_np = provider.generate(request.input, voice=request.voice, speed=request.speed)
+            audio_np = provider.generate(request_body.input, voice=request_body.voice, speed=request_body.speed)
             if audio_np is not None:
                 output_path = os.path.join(tempfile.gettempdir(), f"kokoro_{uuid.uuid4()}.wav")
                 sf.write(output_path, audio_np, 24000)
                 
         elif "qwen" in model_key:
             # 简单判断模式
-            mode = "custom" if request.voice and request.voice != "None" else "design"
+            mode = "custom" if request_body.voice and request_body.voice != "None" else "design"
             provider = QwenTTSProvider(mode=mode)
-            output_path = provider.generate(request.input, voice=request.voice)
+            output_path = provider.generate(request_body.input, voice=request_body.voice)
             
         elif "omni" in model_key:
-            output_path = omni_provider.generate(request.input)
+            output_path = omni_provider.generate(request_body.input)
             
         elif "vox" in model_key:
-            output_path = voxcpm_provider.generate(request.input)
+            output_path = voxcpm_provider.generate(request_body.input)
             
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported TTS model: {request.model}")
@@ -110,7 +114,7 @@ async def speech(request: SpeechRequest):
             raise HTTPException(status_code=500, detail="Failed to generate audio")
 
         if audio_bytes:
-            return io.BytesIO(audio_bytes) # 简单处理，实际可根据 response_format 返回
+            return Response(content=audio_bytes, media_type="audio/mpeg")
 
         return FileResponse(
             output_path, 
