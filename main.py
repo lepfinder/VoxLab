@@ -35,29 +35,22 @@ async def auth_and_log_middleware(request: Request, call_next):
     path = request.url.path
     
     # 仅拦截 /v1/ 下非 admin 的接口
+    start_time = time.time()
     if not path.startswith("/v1/") or path.startswith("/v1/admin"):
         return await call_next(request)
 
-    start_time = time.time()
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.split(" ")[1] if auth_header.startswith("Bearer ") else ""
     
-    if not db.verify_token(token):
+    # 检查是否是本地请求，如果是则免鉴权
+    client_host = request.client.host
+    is_local = client_host in ("127.0.0.1", "localhost", "::1")
+    
+    if not is_local and not db.verify_token(token):
         return JSONResponse(status_code=401, content={"error": "Unauthorized: Invalid or missing API Key"})
 
     # 尝试从 state 中获取模型名（由路由设置）
     model_name = getattr(request.state, "model_name", "unknown")
-    
-    content_type = request.headers.get("Content-Type", "")
-    try:
-        if model_name == "unknown" and "application/json" in content_type:
-            body = await request.body()
-            # 重新包装 receive 保证后续路由还能读到 body
-            async def receive(): return {"type": "http.request", "body": body}
-            request._receive = receive 
-            data = json.loads(body)
-            model_name = data.get("model", "unknown")
-    except: pass
 
     response = await call_next(request)
     

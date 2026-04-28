@@ -6,7 +6,7 @@ import subprocess
 import soundfile as sf
 import numpy as np
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Response, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from starlette.background import BackgroundTask
 
 from app.schemas.openai import TranscriptionResponse, SpeechRequest
@@ -85,7 +85,20 @@ async def speech(request_body: SpeechRequest, request: Request):
 
     try:
         if "edge" in model_key:
-            audio_bytes = await edge_tts_provider.generate(request_body.input, request_body.voice)
+            if request_body.response_format == "pcm":
+                return StreamingResponse(
+                    edge_tts_provider.stream_generate(request_body.input, request_body.voice),
+                    media_type="audio/pcm"
+                )
+            else:
+                # 默认返回 MP3 (edge-tts 原生格式)
+                async def mp3_stream():
+                    import edge_tts
+                    communicate = edge_tts.Communicate(request_body.input, request_body.voice)
+                    async for chunk in communicate.stream():
+                        if chunk["type"] == "audio":
+                            yield chunk["data"]
+                return StreamingResponse(mp3_stream(), media_type="audio/mpeg")
             
         elif "kokoro" in model_key:
             lang_code = request_body.voice[0] if request_body.voice else 'a'
@@ -96,10 +109,22 @@ async def speech(request_body: SpeechRequest, request: Request):
                 sf.write(output_path, audio_np, 24000)
                 
         elif "qwen" in model_key:
-            # 简单判断模式
+            # 优先使用流式生成以降低延迟
             mode = "custom" if request_body.voice and request_body.voice != "None" else "design"
             provider = QwenTTSProvider(mode=mode)
-            output_path = provider.generate(request_body.input, voice=request_body.voice)
+            
+            # 如果是 PCM 格式，直接返回流
+            if request_body.response_format == "pcm":
+                return StreamingResponse(
+                    provider.stream_generate(request_body.input, voice=request_body.voice),
+                    media_type="audio/pcm"
+                )
+            else:
+                # 网页端 Playground 默认需要 mp3 或 wav
+                # 我们将流式结果转为文件返回
+                output_path = provider.generate(request_body.input, voice=request_body.voice)
+                if output_path and os.path.exists(output_path):
+                    return FileResponse(output_path, media_type="audio/wav")
             
         elif "omni" in model_key:
             output_path = omni_provider.generate(request_body.input)

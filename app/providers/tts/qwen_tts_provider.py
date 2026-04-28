@@ -44,3 +44,46 @@ class QwenTTSProvider(BaseProvider):
         if os.path.exists(out_file):
             return out_file # 返回路径，由 Router 处理
         return None
+    def stream_generate(self, text: str, voice: str = None, instruct: str = "A cheerful young female voice with high pitch.", ref_audio: str = None, ref_text: str = None):
+        try:
+            model = model_manager.get_model(self.model_id, self.load)
+            import numpy as np
+            import librosa
+
+            # 默认指令，针对 VoiceDesign 必须提供
+            if not instruct:
+                instruct = "A clear and natural speech."
+
+            gen_kwargs = {
+                "text": text,
+                "voice": voice if voice else "af_bell",
+                "instruct": instruct,
+                "stream": True,
+                "streaming_interval": 0.5,
+            }
+            
+            if ref_audio:
+                gen_kwargs["ref_audio"] = ref_audio
+                gen_kwargs["ref_text"] = ref_text
+
+            logger.info(f"[QwenTTS] Generating stream for: {text[:50]}... (Voice: {voice}, Instruct: {instruct})")
+            
+            # 获取生成器
+            results = model.generate(**gen_kwargs)
+            
+            for result in results:
+                # result.audio 是 mlx array，转为 numpy
+                audio_data = np.array(result.audio)
+                
+                # 如果采样率不是 16000，进行重采样
+                if model.sample_rate != 16000:
+                    audio_16k = librosa.resample(audio_data, orig_sr=model.sample_rate, target_sr=16000)
+                else:
+                    audio_16k = audio_data
+                
+                # 转换为 16-bit PCM (小端序)
+                pcm_data = (audio_16k * 32767).astype(np.int16).tobytes()
+                yield pcm_data
+        except Exception as e:
+            logger.error(f"[QwenTTS] Error during generation: {e}", exc_info=True)
+            yield b"" # 至少返回点什么防止连接挂掉
