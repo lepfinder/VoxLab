@@ -1,119 +1,88 @@
-# HomeCore Python AI Server
+# HomeCore AI Server
 
-这是一个为 HomeCore 提供的轻量级 AI 后端服务，主要负责语音识别 (ASR) 等计算密集型任务。
+这是一个基于 FastAPI 构建的高性能、模块化本地 AI 模型服务平台。它将多种 AI 模型（LLM, ASR, TTS, Voiceprint）集成在一起，并提供统一的 **OpenAI 兼容接口**。
 
-## 功能
-- **ASR (语音转文字)**: 基于 Vosk 的离线语音识别，专门针对 16kHz PCM 音频优化。
-- **健康检查**: 提供 `/health` 接口用于检测模型状态。
+## 核心特性
 
-## 环境要求
-- Conda (Miniconda / Miniforge)
-- Python 3.11
-- [Vosk 模型](https://alphacephei.com/vosk/models): 需要下载中文模型并放置在 `models/` 目录下。
-  - 默认预期路径: `models/vosk-model-small-cn-0.22`
+- **OpenAI 标准兼容**: 提供 `/v1/chat/completions`, `/v1/audio/transcriptions`, `/v1/audio/speech` 等标准接口，可直接对接任何支持 OpenAI 协议的客户端。
+- **延迟加载 (Lazy Loading)**: 模型仅在第一次请求时加载，节省启动时间和内存。
+- **自动卸载 (Auto Unloading)**: 监控模型空闲状态，超时（默认 10 分钟）未使用的模型将自动从显存/内存中释放。
+- **Mac 性能优化**: 针对 Apple Silicon 深度优化，支持 MPS 加速和 MLX 框架。
+- **模块化架构**: 插件化的 Provider 设计，方便快速接入新模型。
 
-## 快速启动
+## 支持的模型
+
+### ASR (语音转文字)
+- **SenseVoice**: 高精度、多语言语音识别。
+- **Vosk**: 轻量级离线识别。
+- **Qwen3-ASR**: 基于 MLX 的高性能 ASR。
+
+### TTS (文字转语音)
+- **Kokoro**: 超高质量、轻量级本地 TTS。
+- **Qwen3-TTS**: 支持声音克隆和捏人 (Voice Design)。
+- **Edge-TTS**: 微软云端高质量语音。
+- **OmniVoice / VoxCPM**: 多种本地推理引擎。
+
+### LLM (大语言模型)
+- **Ollama Proxy**: 代理并转发请求至本地运行的 Ollama。
+
+## 快速开始
 
 ### 1. 准备环境
-建议使用 Conda 创建并激活虚拟环境：
+建议使用 Conda：
 ```bash
 conda create -n homecore-ai python=3.11
 conda activate homecore-ai
-```
-
-### 2. 安装依赖
-```bash
 pip install -r requirements.txt
 ```
 
-### 3. 下载模型
-确保 `models` 目录下有模型文件。如果没有，可以下载并解压：
-```bash
-mkdir -p models
-cd models
-# 下载轻量级中文模型 (约 40MB)
-curl -L https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip -o model.zip
-unzip model.zip
-rm model.zip
-cd ..
-```
+### 2. 配置模型
+编辑 `config.py` 来配置你的模型 Repository ID 或本地路径。
 
-### 4. 启动服务
-确保已激活虚拟环境：
+### 3. 启动服务
 ```bash
-conda activate homecore-ai
 python main.py
 ```
-或者使用 uvicorn 直接启动：
+服务默认运行在 [http://localhost:8001](http://localhost:8001)。
+
+## API 使用示例
+
+### 对话 (LLM)
 ```bash
-conda activate homecore-ai
-uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+curl http://localhost:8001/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen2.5-coder:7b",
+    "messages": [{"role": "user", "content": "你好"}],
+    "stream": true
+  }'
 ```
 
-### 5. 使用 Web UI 进行可视化测试
-提供了一个基于 Gradio 的 Web 控制台，方便你直接在浏览器里用麦克风录音并测试各个大模型的识别效果。
-在运行了上述的 `main.py` 后，Web UI 会自动与主程序同时启动。
-请直接在浏览器中访问 [http://127.0.0.1:8001/webui](http://127.0.0.1:8001/webui) 即可体验，不需要再额外启动新终端。
+### 语音识别 (ASR)
+```bash
+curl http://localhost:8001/v1/audio/transcriptions \
+  -F "file=@test.wav" \
+  -F "model=sensevoice"
+```
 
-## API 接口
+### 语音合成 (TTS)
+```bash
+curl http://localhost:8001/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kokoro",
+    "input": "欢迎使用本地 AI 服务",
+    "voice": "af_heart"
+  }' --output output.wav
+```
 
-### ASR 识别 (Vosk)
-- **URL**: `/asr`
-- **Method**: `POST`
-- **Content-Type**: `multipart/form-data`
-- **Body**: `file` (音频文件，建议 16000Hz, 单声道 PCM/WAV)
-- **Response**: `{"text": "识别到的文字"}`
+## 项目结构
 
-### ASR 识别 (SenseVoice - 推荐)
-- **URL**: `/funasr`
-- **Method**: `POST`
-- **Content-Type**: `multipart/form-data`
-- **Body**: `file` (音频文件，兼容 Raw PCM 或 WAV)
-- **Response**: `{"text": "识别到的文字"}`
+- `app/api/v1/`: 标准 API 实现层。
+- `app/core/`: 核心逻辑（ModelManager 等）。
+- `app/providers/`: 模型适配器。
+- `app/schemas/`: OpenAI 数据协议定义。
+- `config.py`: 统一配置中心。
 
-### ASR 识别 (Qwen3-ASR)
-- **URL**: `/qwen_asr`
-- **Method**: `POST`
-- **Content-Type**: `multipart/form-data`
-- **Body**: `file` (音频文件)
-- **Response**: `{"text": "识别到的文字"}`
-
-### TTS 语音合成 (Edge-TTS)
-- **URL**: `/tts`
-- **Method**: `POST`
-- **Content-Type**: `application/json`
-- **Body**: `{"text": "你要合成的文字", "voice": "zh-CN-XiaoxiaoNeural"}`
-- **Response**: 返回 `audio/mpeg` (MP3 文件流)
-
-### TTS 语音合成 (Kokoro - 本地模型)
-- **URL**: `/kokoro`
-- **Method**: `POST`
-- **Content-Type**: `application/json`
-- **Body**: `{"text": "你要合成的文字", "voice": "af_heart", "speed": 1.0}`
-- **Response**: 返回 `audio/wav` (WAV 文件流)
-
-### TTS 语音合成 (Qwen3-TTS 变声克隆)
-- **URL**: `/qwen_tts`
-- **Method**: `POST`
-- **Content-Type**: `multipart/form-data`
-- **Body**: `text` (字符串), `ref_audio` (参考音频文件)
-- **Response**: 返回 `audio/wav` (WAV 文件流)
-
-### TTS 语音合成 (OmniVoice - Voice Design & Voice Cloning)
-- **URL**: `/omni_tts`
-- **Method**: `POST`
-- **Content-Type**: `multipart/form-data`
-- **Body**: `text` (字符串), `instruct` (可选的 Voice Design prompt 比如 "female, 四川话"), `ref_audio` (可选的参考音频)
-- **Response**: 返回 `audio/wav` (WAV 文件流)
-
-### TTS 语音合成 (VoxCPM - Voice Design)
-- **URL**: `/voxcpm`
-- **Method**: `POST`
-- **Content-Type**: `multipart/form-data`
-- **Body**: `text` (字符串), `instruct` (可选的 Voice Design prompt 比如 "年轻女性，声音温柔甜美，语速适中")
-- **Response**: 返回 `audio/wav` (WAV 文件流)
-
-### 健康检查
-- **URL**: `/health`
-- **Method**: `GET`
-- **Response**: `{"status": "ok", "model": "..."}`
+## License
+MIT

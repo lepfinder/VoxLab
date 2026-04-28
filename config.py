@@ -19,5 +19,8 @@ MODELS = {
     "voiceprint": "iic/speech_eres2netv2_sv_zh-cn_16k-common",
 }
 
+# Ollama 配置
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
 # 缓存目录配置
 HF_HOME = os.getenv("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
