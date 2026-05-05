@@ -78,9 +78,11 @@ async def auth_and_log_middleware(request: Request, call_next):
 from app.api.v1 import audio as audio_v1
 from app.api.v1 import chat as chat_v1
 from app.api.v1 import admin as admin_v1
+from app.api.v1 import voiceprint as voiceprint_v1
 app.include_router(audio_v1.router)
 app.include_router(chat_v1.router)
 app.include_router(admin_v1.router)
+app.include_router(voiceprint_v1.router)
 
 @app.get("/health")
 async def health():

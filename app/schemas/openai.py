@@ -27,6 +27,7 @@ class TranscriptionResponse(BaseModel):
     text: str
     language: Optional[str] = None
     duration: Optional[float] = None
+    spk_embedding: Optional[List[float]] = None
 
 # --- Audio Speech (TTS) ---
 

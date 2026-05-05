@@ -5,6 +5,7 @@ import tempfile
 import subprocess
 import soundfile as sf
 import numpy as np
+import logging
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Response, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from starlette.background import BackgroundTask
@@ -21,6 +22,7 @@ from app.providers.tts.omni_provider import OmniVoiceProvider
 from app.providers.tts.voxcpm_provider import VoxCPMProvider
 
 router = APIRouter(prefix="/v1/audio")
+logger = logging.getLogger(__name__)
 
 # 实例化提供者 (延迟加载保证了这里实例化不会占用大量内存)
 sensevoice_provider = SenseVoiceProvider()
@@ -69,9 +71,13 @@ async def transcriptions(
                 audio_array, _ = sf.read(audio_io)
         except Exception:
             audio_array = np.frombuffer(content, dtype=np.int16).astype(np.float32) / 32768.0
-        text = sensevoice_provider.transcribe(audio_array)
+        
+        asr_result = sensevoice_provider.transcribe(audio_array)
+        text = asr_result.get("text", "")
+        spk_embedding = asr_result.get("spk_embedding")
 
-    return TranscriptionResponse(text=text)
+    logger.info(f"[ASR] Model: {model}, Result: {text}")
+    return TranscriptionResponse(text=text, spk_embedding=spk_embedding)
 
 @router.post("/speech")
 async def speech(request_body: SpeechRequest, request: Request):
@@ -82,6 +88,8 @@ async def speech(request_body: SpeechRequest, request: Request):
     model_key = request_body.model.lower()
     output_path = None
     audio_bytes = None
+
+    logger.info(f"[TTS] Model: {request_body.model}, Text: {request_body.input[:50]}...")
 
     try:
         if "edge" in model_key:

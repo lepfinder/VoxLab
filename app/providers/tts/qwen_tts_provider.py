@@ -81,8 +81,9 @@ class QwenTTSProvider(BaseProvider):
                 else:
                     audio_16k = audio_data
                 
-                # 转换为 16-bit PCM (小端序)
-                pcm_data = (audio_16k * 32767).astype(np.int16).tobytes()
+                # 转换为 16-bit PCM (小端序)，必须先 clip 防止超过 [-1.0, 1.0] 导致溢出爆音
+                audio_clipped = np.clip(audio_16k, -1.0, 1.0)
+                pcm_data = (audio_clipped * 32767).astype(np.int16).tobytes()
                 yield pcm_data
         except Exception as e:
             logger.error(f"[QwenTTS] Error during generation: {e}", exc_info=True)

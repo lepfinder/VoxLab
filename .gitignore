@@ -12,6 +12,9 @@ data/*
 data/*.db
 data/*.db-journal
 
+temp_audio/*
+
+
 
 # Models (模型文件通常很大，不建议提交)
 models/
