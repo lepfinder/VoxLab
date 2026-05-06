@@ -28,7 +28,7 @@ class SenseVoiceProvider(BaseProvider):
         res = model.generate(
             input=audio_data,
             cache={},
-            language="auto",
+            language="zh",
             use_itn=True,
             batch_size_s=60,
             merge_vad=True
@@ -40,29 +40,24 @@ class SenseVoiceProvider(BaseProvider):
         raw_text = res[0].get('text', '')
         text = re.sub(r'<\|.*?\|>', '', raw_text).strip()
 
-        # 2. 提取声纹 (使用项目配置的 ERes2NetV2 模型)
+        # 2. 提取声纹 (使用项目配置的 CAM++/ERes2NetV2 模型)
         spk_embedding = None
         try:
             from app.providers.voiceprint_provider import VoiceprintProvider
+            import tempfile
+            import soundfile as sf
+            import os
+            
             vp = VoiceprintProvider()
-            # 获取加载好的 pipeline
-            p = model_manager.get_model(vp.model_id, vp.load)
-            
-            # 直接对 numpy 数组进行推理
-            import torch
-            # 确保数据是 float32 且在 [0, 1] 之间
-            audio_tensor = torch.from_numpy(audio_data.astype(np.float32)).unsqueeze(0)
-            
-            # 尝试通过 pipeline 的模型直接提取
-            model_obj = getattr(p, 'model', None) or getattr(p, '_model', None)
-            if model_obj is not None:
-                with torch.no_grad():
-                    emb = model_obj(audio_tensor)
-                    if hasattr(emb, "cpu"): emb = emb.cpu()
-                    spk_embedding = np.array(emb).flatten().tolist()
-            else:
-                # 兜底：如果无法直接推理，说明 pipeline 结构较特殊
-                logger.warning("Pipeline model not found, speaker matching might be skipped in chat")
+            # 为了复用 VoiceprintProvider 的补齐和异常处理逻辑，我们写一个临时文件
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                tmp_path = f.name
+            try:
+                sf.write(tmp_path, audio_data, 16000)
+                spk_embedding = vp.extract(tmp_path)
+            finally:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
         except Exception as e:
             logger.error(f"Failed to extract spk_embedding during transcription: {e}")
 

@@ -16,7 +16,7 @@ MODELS = {
     "vox_cpm": "openbmb/VoxCPM2",
     
     # 声纹模型
-    "voiceprint": "iic/speech_eres2netv2_sv_zh-cn_16k-common",
+    "voiceprint": "iic/speech_campplus_sv_zh-cn_16k-common",
 }
 
 # Ollama 配置
