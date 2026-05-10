@@ -27,8 +27,8 @@ class VoiceStreamHandler:
         self.pcm_buffer = []
         self.is_speaking = False
         self.silence_count = 0
-        self.VAD_THRESHOLD = 650
-        self.SILENCE_END_FRAMES = 8 # 从 15 调低到 8 (约 0.48s)，大幅提升响应速度
+        self.VAD_THRESHOLD = 800 # 调回 800，保持灵敏度
+        self.SILENCE_END_FRAMES = 14 # 增加静音帧数（约 0.84s），允许更自然的停顿
 
     async def process_packet(self, data: bytes):
         try:
@@ -55,7 +55,14 @@ class VoiceStreamHandler:
                     
                     # SenseVoice 识别非常快，直接在这里调用
                     result = self.provider.transcribe(audio_data)
-                    return result.get("text", "")
+                    text = result.get("text", "").strip()
+                    
+                    # 过滤逻辑：如果识别结果太短（只有1个字）或者是纯标点符号，直接忽略
+                    if len(text) <= 1 or text in ["。", "？", "！", ".", "?", "!"]:
+                        logger.info(f"--- [Python VAD] Ignored noise/short text: {text}")
+                        return None
+                        
+                    return text
             return None
         except Exception as e:
             logger.error(f"VoiceStream Error: {e}")
