@@ -2,29 +2,69 @@ import io
 import uuid
 import os
 import tempfile
-import subprocess
-import soundfile as sf
+import struct
 import numpy as np
+import soundfile as sf
 import logging
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Response, Request
+import opuslib
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Response, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
 from starlette.background import BackgroundTask
-
 from app.schemas.openai import TranscriptionResponse, SpeechRequest
 from app.providers.asr.sensevoice_provider import SenseVoiceProvider
 from app.providers.asr.vosk_provider import VoskProvider
 from app.providers.asr.qwen_asr_provider import QwenASRProvider
-
-from app.providers.tts.kokoro_provider import KokoroProvider
 from app.providers.tts.edge_tts_provider import EdgeTTSProvider
+from app.providers.tts.kokoro_provider import KokoroProvider
 from app.providers.tts.qwen_tts_provider import QwenTTSProvider
 from app.providers.tts.omni_provider import OmniVoiceProvider
 from app.providers.tts.voxcpm_provider import VoxCPMProvider
+# --- 实时语音流处理逻辑 ---
+class VoiceStreamHandler:
+    def __init__(self, provider):
+        self.decoder = opuslib.Decoder(16000, 1)
+        self.provider = provider
+        self.pcm_buffer = []
+        self.is_speaking = False
+        self.silence_count = 0
+        self.VAD_THRESHOLD = 650
+        self.SILENCE_END_FRAMES = 8 # 从 15 调低到 8 (约 0.48s)，大幅提升响应速度
+
+    async def process_packet(self, data: bytes):
+        try:
+            pcm = self.decoder.decode(data, 960)
+            pcm_np = np.frombuffer(pcm, dtype=np.int16)
+            energy = np.abs(pcm_np).mean()
+            
+            if energy > self.VAD_THRESHOLD:
+                if not self.is_speaking:
+                    self.is_speaking = True
+                    logger.info(">>> [Python VAD] Voice Start")
+                self.silence_count = 0
+                self.pcm_buffer.append(pcm_np)
+            elif self.is_speaking:
+                self.silence_count += 1
+                self.pcm_buffer.append(pcm_np)
+                
+                if self.silence_count > self.SILENCE_END_FRAMES:
+                    logger.info("<<< [Python VAD] Voice End (Triggering ASR)")
+                    audio_data = np.concatenate(self.pcm_buffer).astype(np.float32) / 32768.0
+                    self.pcm_buffer = []
+                    self.is_speaking = False
+                    self.silence_count = 0
+                    
+                    # SenseVoice 识别非常快，直接在这里调用
+                    result = self.provider.transcribe(audio_data)
+                    return result.get("text", "")
+            return None
+        except Exception as e:
+            logger.error(f"VoiceStream Error: {e}")
+            return None
 
 router = APIRouter(prefix="/v1/audio")
 logger = logging.getLogger(__name__)
 
-# 实例化提供者 (延迟加载保证了这里实例化不会占用大量内存)
+# 实例化提供者
 sensevoice_provider = SenseVoiceProvider()
 vosk_provider = VoskProvider()
 qwen_asr_provider = QwenASRProvider()
@@ -32,128 +72,158 @@ qwen_asr_provider = QwenASRProvider()
 edge_tts_provider = EdgeTTSProvider()
 omni_provider = OmniVoiceProvider()
 voxcpm_provider = VoxCPMProvider()
-# Kokoro 和 QwenTTS 在请求时根据参数实例化（因为有多种模式/语言）
 
-@router.post("/transcriptions", response_model=TranscriptionResponse)
-async def transcriptions(
-    request: Request,
-    file: UploadFile = File(...),
-    model: str = Form("sensevoice")
-):
-    """
-    OpenAI 兼容的 ASR 接口
-    """
-    request.state.model_name = model
-    content = await file.read()
-    
-    # 根据模型需求准备数据
-    model_key = model.lower()
-    
-    if "vosk" in model_key:
-        text = vosk_provider.transcribe(content)
-    elif "qwen" in model_key:
-        # Qwen 需要文件路径，我们存一个临时文件
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp.write(content)
-            tmp_path = tmp.name
-        try:
-            # 预处理 (16k 单声道)
-            norm_path = tmp_path.replace(".wav", "_norm.wav")
-            subprocess.run(["ffmpeg", "-y", "-i", tmp_path, "-ar", "16000", "-ac", "1", norm_path], check=True, capture_output=True)
-            text = qwen_asr_provider.transcribe(norm_path)
-            if os.path.exists(norm_path): os.remove(norm_path)
-        finally:
-            if os.path.exists(tmp_path): os.remove(tmp_path)
-    else:
-        # 默认使用 SenseVoice，它接收 numpy 数组
-        try:
-            with io.BytesIO(content) as audio_io:
-                audio_array, _ = sf.read(audio_io)
-        except Exception:
-            audio_array = np.frombuffer(content, dtype=np.int16).astype(np.float32) / 32768.0
-        
-        asr_result = sensevoice_provider.transcribe(audio_array)
-        text = asr_result.get("text", "")
-        spk_embedding = asr_result.get("spk_embedding")
-
-    logger.info(f"[ASR] Model: {model}, Result: {text}")
-    return TranscriptionResponse(text=text, spk_embedding=spk_embedding)
+@router.websocket("/voice")
+async def voice_websocket(websocket: WebSocket):
+    await websocket.accept()
+    handler = VoiceStreamHandler(sensevoice_provider)
+    logger.info("[WS] Voice stream connection accepted")
+    try:
+        while True:
+            data = await websocket.receive_bytes()
+            text = await handler.process_packet(data)
+            if text:
+                await websocket.send_json({"type": "asr_result", "text": text})
+    except WebSocketDisconnect:
+        logger.info("[WS] Voice stream disconnected")
+    except Exception as e:
+        logger.error(f"[WS] Error: {e}")
 
 @router.post("/speech")
 async def speech(request_body: SpeechRequest, request: Request):
-    """
-    OpenAI 兼容的 TTS 接口，支持多种本地和云端模型
-    """
     request.state.model_name = request_body.model
     model_key = request_body.model.lower()
     output_path = None
     audio_bytes = None
 
-    logger.info(f"[TTS] Model: {request_body.model}, Text: {request_body.input[:50]}...")
+    logger.info(f"[TTS] Model: {request_body.model}, Format: {request_body.response_format}, Text: {request_body.input[:50]}...")
 
     try:
+        # 特殊处理 Opus 流式格式 (对接硬件)
+        if request_body.response_format == "opus":
+            async def opus_stream():
+                encoder = opuslib.Encoder(16000, 1, opuslib.APPLICATION_VOIP)
+                frame_size = 960 # 60ms
+                pcm_accum = np.array([], dtype=np.int16)
+                total_samples_received = 0
+                total_packets_sent = 0
+                
+                logger.info(f"[TTS] Starting streaming Opus encoding for: {request_body.input[:30]}...")
+
+                # 为了调试，收集所有 PCM 数据并保存为 WAV
+                debug_pcm_list = []
+
+                async def process_pcm_chunk(chunk_bytes):
+                    nonlocal pcm_accum, total_samples_received, total_packets_sent, debug_pcm_list
+                    if not chunk_bytes: return
+                    
+                    chunk_np = np.frombuffer(chunk_bytes, dtype=np.int16)
+                    debug_pcm_list.append(chunk_np)
+                    total_samples_received += len(chunk_np)
+                    pcm_accum = np.concatenate([pcm_accum, chunk_np])
+                    
+                    while len(pcm_accum) >= frame_size:
+                        frame = pcm_accum[:frame_size]
+                        pcm_accum = pcm_accum[frame_size:]
+                        try:
+                            opus_data = encoder.encode(frame.tobytes(), frame_size)
+                            total_packets_sent += 1
+                            yield struct.pack(">H", len(opus_data)) + opus_data
+                        except Exception as e:
+                            logger.error(f"Opus Encode Error: {e}")
+
+                # 数据获取与实时编码
+                if "qwen" in model_key:
+                    provider = QwenTTSProvider(mode="custom" if request_body.voice and request_body.voice != "None" else "design")
+                    for chunk in provider.stream_generate(request_body.input, voice=request_body.voice):
+                        async for opus_packet in process_pcm_chunk(chunk):
+                            yield opus_packet
+                elif "edge" in model_key:
+                    async for chunk in edge_tts_provider.stream_generate(request_body.input, request_body.voice):
+                        async for opus_packet in process_pcm_chunk(chunk):
+                            yield opus_packet
+                else:
+                    # 其他非流式模型逻辑...
+                    full_pcm_data = b""
+                    if "kokoro" in model_key:
+                        p = KokoroProvider()
+                        audio_np = p.generate(request_body.input, voice=request_body.voice)
+                        if audio_np is not None:
+                            import librosa
+                            audio_16k = librosa.resample(audio_np, orig_sr=24000, target_sr=16000)
+                            full_pcm_data = (np.clip(audio_16k, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
+                    else:
+                        path = None
+                        if "omni" in model_key: path = omni_provider.generate(request_body.input)
+                        elif "vox" in model_key: path = voxcpm_provider.generate(request_body.input)
+                        if path and os.path.exists(path):
+                            data, sr = sf.read(path, dtype='int16')
+                            if sr != 16000:
+                                import librosa
+                                data = librosa.resample(data.astype(np.float32), orig_sr=sr, target_sr=16000)
+                                data = (np.clip(data, -1.0, 1.0) * 32767).astype(np.int16)
+                            full_pcm_data = data.tobytes()
+                            os.remove(path)
+                    
+                    if full_pcm_data:
+                        async for opus_packet in process_pcm_chunk(full_pcm_data):
+                            yield opus_packet
+
+                # 处理剩余尾部
+                if len(pcm_accum) > 0:
+                    pad_size = frame_size - len(pcm_accum)
+                    final_frame = np.concatenate([pcm_accum, np.zeros(pad_size, dtype=np.int16)])
+                    try:
+                        opus_data = encoder.encode(final_frame.tobytes(), frame_size)
+                        total_packets_sent += 1
+                        yield struct.pack(">H", len(opus_data)) + opus_data
+                    except: pass
+                
+                # 保存调试文件
+                if debug_pcm_list:
+                    try:
+                        full_audio = np.concatenate(debug_pcm_list)
+                        sf.write("/tmp/debug_tts.wav", full_audio, 16000)
+                        logger.info(f"[TTS] Debug file saved: /tmp/debug_tts.wav ({len(full_audio)/16000:.2f}s)")
+                    except Exception as e:
+                        logger.error(f"Failed to save debug wav: {e}")
+
+                logger.info(f"[TTS] Finished. Received samples: {total_samples_received}, Sent packets: {total_packets_sent} ({total_packets_sent*60}ms)")
+
+            return StreamingResponse(opus_stream(), media_type="audio/ogg")
+
+        # 标准格式处理
         if "edge" in model_key:
             if request_body.response_format == "pcm":
-                return StreamingResponse(
-                    edge_tts_provider.stream_generate(request_body.input, request_body.voice),
-                    media_type="audio/pcm"
-                )
+                return StreamingResponse(edge_tts_provider.stream_generate(request_body.input, request_body.voice), media_type="audio/pcm")
             else:
-                # 默认返回 MP3 (edge-tts 原生格式)
                 async def mp3_stream():
                     import edge_tts
-                    communicate = edge_tts.Communicate(request_body.input, request_body.voice)
-                    async for chunk in communicate.stream():
-                        if chunk["type"] == "audio":
-                            yield chunk["data"]
+                    c = edge_tts.Communicate(request_body.input, request_body.voice)
+                    async for chunk in c.stream():
+                        if chunk["type"] == "audio": yield chunk["data"]
                 return StreamingResponse(mp3_stream(), media_type="audio/mpeg")
-            
+        
         elif "kokoro" in model_key:
-            lang_code = request_body.voice[0] if request_body.voice else 'a'
-            provider = KokoroProvider(lang_code=lang_code)
-            audio_np = provider.generate(request_body.input, voice=request_body.voice, speed=request_body.speed)
-            if audio_np is not None:
-                output_path = os.path.join(tempfile.gettempdir(), f"kokoro_{uuid.uuid4()}.wav")
-                sf.write(output_path, audio_np, 24000)
-                
+            p = KokoroProvider()
+            audio_np = p.generate(request_body.input, voice=request_body.voice)
+            output_path = os.path.join(tempfile.gettempdir(), f"kokoro_{uuid.uuid4()}.wav")
+            sf.write(output_path, audio_np, 24000)
+        
         elif "qwen" in model_key:
-            # 优先使用流式生成以降低延迟
-            mode = "custom" if request_body.voice and request_body.voice != "None" else "design"
-            provider = QwenTTSProvider(mode=mode)
-            
-            # 如果是 PCM 格式，直接返回流
+            p = QwenTTSProvider(mode="custom" if request_body.voice != "None" else "design")
             if request_body.response_format == "pcm":
-                return StreamingResponse(
-                    provider.stream_generate(request_body.input, voice=request_body.voice),
-                    media_type="audio/pcm"
-                )
-            else:
-                # 网页端 Playground 默认需要 mp3 或 wav
-                # 我们将流式结果转为文件返回
-                output_path = provider.generate(request_body.input, voice=request_body.voice)
-                if output_path and os.path.exists(output_path):
-                    return FileResponse(output_path, media_type="audio/wav")
-            
-        elif "omni" in model_key:
-            output_path = omni_provider.generate(request_body.input)
-            
-        elif "vox" in model_key:
-            output_path = voxcpm_provider.generate(request_body.input)
-            
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported TTS model: {request.model}")
+                return StreamingResponse(p.stream_generate(request_body.input, voice=request_body.voice), media_type="audio/pcm")
+            output_path = p.generate(request_body.input, voice=request_body.voice)
 
-        if not output_path and not audio_bytes:
-            raise HTTPException(status_code=500, detail="Failed to generate audio")
+        elif "omni" in model_key: output_path = omni_provider.generate(request_body.input)
+        elif "vox" in model_key: output_path = voxcpm_provider.generate(request_body.input)
+        else: raise HTTPException(status_code=400, detail=f"Unsupported model: {request_body.model}")
 
-        if audio_bytes:
-            return Response(content=audio_bytes, media_type="audio/mpeg")
+        if output_path and os.path.exists(output_path):
+            return FileResponse(output_path, media_type="audio/wav", background=BackgroundTask(os.remove, output_path))
+        raise HTTPException(status_code=500, detail="Failed to generate audio")
 
-        return FileResponse(
-            output_path, 
-            media_type="audio/wav", 
-            background=BackgroundTask(os.remove, output_path)
-        )
     except Exception as e:
-        if output_path and os.path.exists(output_path): os.remove(output_path)
+        logger.error(f"[TTS] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

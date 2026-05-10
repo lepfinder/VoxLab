@@ -59,7 +59,7 @@ class QwenTTSProvider(BaseProvider):
                 "voice": voice if voice else "af_bell",
                 "instruct": instruct,
                 "stream": True,
-                "streaming_interval": 0.5,
+                "streaming_interval": 1.0, # 稍微拉大间隔，让模型推理更稳健
             }
             
             if ref_audio:

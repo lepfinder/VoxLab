@@ -18,7 +18,25 @@ logger = logging.getLogger("HomeCore")
 
 from app.core.database import db
 
-app = FastAPI(title="HomeCore AI Server")
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Pre-warming models...")
+    from app.core.model_manager import model_manager
+    try:
+        # 预热 ASR
+        model_manager.get_model("iic/SenseVoiceSmall")
+        logger.info("SenseVoice pre-warmed.")
+        # 预热 TTS
+        from app.providers.tts.qwen_tts_provider import QwenTTSProvider
+        QwenTTSProvider()
+        logger.info("QwenTTS pre-warmed.")
+    except Exception as e:
+        logger.error(f"Pre-warm failed: {e}")
+    yield
+
+app = FastAPI(title="HomeCore AI Server", lifespan=lifespan)
 
 # 配置 CORS
 app.add_middleware(
