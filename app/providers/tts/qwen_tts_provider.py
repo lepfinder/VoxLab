@@ -16,7 +16,26 @@ class QwenTTSProvider(BaseProvider):
 
     def load(self):
         from mlx_audio.tts.utils import load_model
-        return load_model(self.model_id)
+        import os
+        
+        # 智能探测：如果本地缓存有该模型，直接使用本地路径加载，避开网络检查
+        target_path = self.model_id
+        try:
+            # 转换 Repo ID 为 HF 缓存文件夹名格式
+            folder_name = f"models--{self.model_id.replace('/', '--')}"
+            hf_home = os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
+            cache_dir = os.path.join(hf_home, "hub", folder_name, "snapshots")
+            
+            if os.path.exists(cache_dir):
+                snapshots = os.listdir(cache_dir)
+                if snapshots:
+                    # 使用第一个（通常也是唯一一个）快照
+                    target_path = os.path.join(cache_dir, snapshots[0])
+                    logger.info(f"[QwenTTS] Local cache found, loading from: {target_path}")
+        except Exception as e:
+            logger.warn(f"[QwenTTS] Failed to detect local cache: {e}")
+
+        return load_model(target_path)
 
     def generate(self, text: str, voice: str = None, instruct: str = "A natural speech.", ref_audio: str = None, ref_text: str = None):
         model = model_manager.get_model(self.model_id, self.load)
@@ -35,8 +54,8 @@ class QwenTTSProvider(BaseProvider):
         if ref_audio:
             gen_kwargs["ref_audio"] = ref_audio
             gen_kwargs["ref_text"] = ref_text
-        elif voice:
-            gen_kwargs["voice"] = voice
+        else:
+            gen_kwargs["voice"] = voice if voice and voice != "None" else "serena"
 
         generate_audio(**gen_kwargs)
         
@@ -56,10 +75,10 @@ class QwenTTSProvider(BaseProvider):
 
             gen_kwargs = {
                 "text": text,
-                "voice": voice if voice else "af_bell",
-                "instruct": instruct,
+                "voice": voice if voice and voice != "None" else "serena",
+                "instruct": instruct if instruct else "A clear and natural speech.",
                 "stream": True,
-                "streaming_interval": 1.0, # 稍微拉大间隔，让模型推理更稳健
+                "streaming_interval": 1.0, 
             }
             
             if ref_audio:

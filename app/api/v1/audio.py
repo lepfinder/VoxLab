@@ -234,3 +234,39 @@ async def speech(request_body: SpeechRequest, request: Request):
     except Exception as e:
         logger.error(f"[TTS] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/transcriptions")
+async def transcribe(
+    request: Request,
+    file: UploadFile = File(...),
+    model: str = Form("sensevoice")
+):
+    request.state.model_name = model
+    logger.info(f"[ASR] Request received. File: {file.filename}, Content-Type: {file.content_type}, Model: {model}")
+    
+    temp_path = None
+    try:
+        # 保存到临时文件
+        suffix = os.path.splitext(file.filename)[1] if file.filename else ".webm"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            content = await file.read()
+            tmp.write(content)
+            temp_path = tmp.name
+
+        # 使用 librosa 加载音频（兼容性更好）
+        import librosa
+        data, sr = librosa.load(temp_path, sr=16000)
+            
+        # 调用 SenseVoice Provider
+        result = sensevoice_provider.transcribe(data)
+        
+        logger.info(f"[ASR] Transcription result: {result.get('text')}")
+        return TranscriptionResponse(text=result.get("text", ""))
+        
+    except Exception as e:
+        logger.error(f"[ASR] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try: os.remove(temp_path)
+            except: pass

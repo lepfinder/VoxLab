@@ -24,3 +24,7 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 # 缓存目录配置
 HF_HOME = os.getenv("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
+
+# 镜像站配置 (如果需要使用镜像站，请修改此项)
+# 例如使用 hf-mirror: https://hf-mirror.com
+HF_ENDPOINT = os.getenv("HF_ENDPOINT", "https://hf-mirror.com") 

@@ -1,6 +1,11 @@
+import os
+from config import HF_HOME, HF_ENDPOINT
+# 必须在导入任何 huggingface 相关的库之前设置环境变量
+os.environ["HF_HOME"] = HF_HOME
+os.environ["HF_ENDPOINT"] = HF_ENDPOINT
+
 import logging
 import json
-import os
 import time
 import uvicorn
 from fastapi import FastAPI, Request
@@ -121,8 +126,10 @@ if DEV_MODE:
     
     @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
     async def proxy_frontend(path: str, request: Request):
+        # 只有当路径不以 v1/ 开头时才代理到前端开发服务器
+        # 以 v1/ 开头的路径如果走到这里，说明之前的 API 路由都没匹配上
         if path.startswith("v1/"):
-            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+            return JSONResponse(status_code=404, content={"detail": f"API Route //{path} not found in this instance"})
             
         url = f"/{path}"
         # 仅在非 GET/HEAD 请求时尝试读取 body

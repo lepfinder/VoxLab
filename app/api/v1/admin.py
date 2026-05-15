@@ -21,7 +21,7 @@ async def get_models():
             "tts": [
                 {
                     "id": "kokoro",
-                    "voices": ["af_heart", "af_bella", "af_nicole", "af_sky", "am_adam", "am_michael"]
+                    "voices": ["serena", "vivian", "uncle_fu", "ryan", "aiden", "ono_anna", "sohee", "eric", "dylan"]
                 },
                 {
                     "id": "qwen",
