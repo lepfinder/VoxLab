@@ -19,7 +19,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
-logger = logging.getLogger("HomeCore")
+logger = logging.getLogger("VoxLab")
 
 from app.core.database import db
 
@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
         logger.error(f"Pre-warm failed: {e}")
     yield
 
-app = FastAPI(title="HomeCore AI Server", lifespan=lifespan)
+app = FastAPI(title="VoxLab AI Server", lifespan=lifespan)
 
 # 配置 CORS
 app.add_middleware(
@@ -99,11 +99,9 @@ async def auth_and_log_middleware(request: Request, call_next):
 
 # --- 注册 API 路由 ---
 from app.api.v1 import audio as audio_v1
-from app.api.v1 import chat as chat_v1
 from app.api.v1 import admin as admin_v1
 from app.api.v1 import voiceprint as voiceprint_v1
 app.include_router(audio_v1.router)
-app.include_router(chat_v1.router)
 app.include_router(admin_v1.router)
 app.include_router(voiceprint_v1.router)
 
@@ -120,9 +118,9 @@ if DEV_MODE:
     from fastapi.responses import StreamingResponse
     
     # 全局代理客户端
-    proxy_client = httpx.AsyncClient(base_url="http://localhost:3000")
-    
-    logger.info("Running in DEV_MODE: Proxying frontend to http://localhost:3000")
+    proxy_client = httpx.AsyncClient(base_url="http://localhost:7898")
+
+    logger.info("Running in DEV_MODE: Proxying frontend to http://localhost:7898")
     
     @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
     async def proxy_frontend(path: str, request: Request):

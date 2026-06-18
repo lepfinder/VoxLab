@@ -15,9 +15,8 @@ async def get_stats():
 async def get_models():
     # 动态返回支持的模型及其元数据
     return {
-        "chat": ["qwen", "llama3", "glm4", "mistral"],
         "audio": {
-            "asr": ["sensevoice", "qwen", "whisper"],
+            "asr": ["sensevoice", "qwen", "vosk"],
             "tts": [
                 {
                     "id": "kokoro",
@@ -29,6 +28,10 @@ async def get_models():
                 },
                 {
                     "id": "voxcpm",
+                    "voices": ["default"]
+                },
+                {
+                    "id": "omni",
                     "voices": ["default"]
                 },
                 {

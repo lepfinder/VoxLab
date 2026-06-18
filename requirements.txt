@@ -13,7 +13,13 @@ httpx
 edge-tts
 kokoro
 soundfile
-mlx-audio
 misaki[zh]
 omnivoice
 voxcpm
+
+# macOS: MLX 加速版 (Apple Silicon)
+mlx-audio; sys_platform == "darwin"
+
+# Linux: PyTorch 版 Qwen ASR/TTS
+qwen-asr; sys_platform == "linux"
+qwen-tts; sys_platform == "linux"

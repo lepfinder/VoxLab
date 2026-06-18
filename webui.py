@@ -150,8 +150,8 @@ async def test_tts(text, provider, voice_name, ref_audio_path, ref_text):
         return None, f"发生异常: {str(e)}"
 
 # 使用 Gradio Blocks 构建美观的界面
-with gr.Blocks(title="HomeCore AI Server 测试工作台", theme=gr.themes.Soft()) as demo:
-    gr.Markdown("# 🎙️ HomeCore AI Server 本地测试工作台")
+with gr.Blocks(title="VoxLab AI Server 测试工作台", theme=gr.themes.Soft()) as demo:
+    gr.Markdown("# 🎙️ VoxLab AI Server 本地测试工作台")
     gr.Markdown("这是一个独立的 Web UI 工具，用于直接在浏览器里测试您的后端 AI 接口。\n\n**前置要求**：请确保底层的 `python main.py` 服务已经在运行，并且监听在 `8001` 端口。")
     
     with gr.Tab("🗣️ 语音识别 (ASR)"):
