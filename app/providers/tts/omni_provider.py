@@ -5,7 +5,7 @@ import tempfile
 import uuid
 from app.providers.base import BaseProvider
 from app.core.model_manager import model_manager
-from config import MODELS
+from config import MODELS, HF_ENDPOINT
 
 class OmniVoiceProvider(BaseProvider):
     def __init__(self):
@@ -13,9 +13,12 @@ class OmniVoiceProvider(BaseProvider):
 
     def load(self):
         from omnivoice import OmniVoice
+        from huggingface_hub import snapshot_download
+        # 通过镜像站下载模型到本地缓存，避免直连 huggingface.co
+        local_path = snapshot_download(self.model_id, endpoint=HF_ENDPOINT)
         device = "mps" if torch.backends.mps.is_available() else ("cuda:0" if torch.cuda.is_available() else "cpu")
         return OmniVoice.from_pretrained(
-            self.model_id,
+            local_path,
             device_map=device,
             dtype=torch.float16 if device != "cpu" else torch.float32
         )

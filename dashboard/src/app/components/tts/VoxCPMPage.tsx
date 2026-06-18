@@ -64,7 +64,7 @@ export default function VoxCPMPage({ selectedKey }: VoxCPMPageProps) {
         modelId="openbmb/VoxCPM2"
         framework="PyTorch"
         useCases={['情感语音合成', '有声书', '虚拟助手', '多风格播报']}
-        githubUrl="https://github.com/thu-ml/CoMoSpeech"
+        githubUrl="https://github.com/OpenBMB/VoxCPM"
       />
 
       {/* 参数说明 */}

@@ -4,7 +4,7 @@ import tempfile
 import uuid
 from app.providers.base import BaseProvider
 from app.core.model_manager import model_manager
-from config import MODELS
+from config import MODELS, HF_ENDPOINT
 
 class VoxCPMProvider(BaseProvider):
     def __init__(self):
@@ -12,7 +12,10 @@ class VoxCPMProvider(BaseProvider):
 
     def load(self):
         from voxcpm import VoxCPM
-        return VoxCPM.from_pretrained(self.model_id, load_denoiser=False)
+        from huggingface_hub import snapshot_download
+        # 通过镜像站下载模型到本地缓存，避免直连 huggingface.co
+        local_path = snapshot_download(self.model_id, endpoint=HF_ENDPOINT)
+        return VoxCPM.from_pretrained(local_path, load_denoiser=False)
 
     def generate(self, text: str, instruct: str = ""):
         model = model_manager.get_model(self.model_id, self.load)
