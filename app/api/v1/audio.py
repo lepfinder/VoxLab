@@ -19,6 +19,7 @@ from app.providers.tts.kokoro_provider import KokoroProvider
 from app.providers.tts.qwen_tts_provider import QwenTTSProvider
 from app.providers.tts.omni_provider import OmniVoiceProvider
 from app.providers.tts.voxcpm_provider import VoxCPMProvider
+from app.providers.vad import EnergyVADProvider, WebRTCVADProvider, SileroVADProvider
 # --- 实时语音流处理逻辑 ---
 class VoiceStreamHandler:
     def __init__(self, provider):
@@ -79,6 +80,10 @@ qwen_asr_provider = QwenASRProvider()
 edge_tts_provider = EdgeTTSProvider()
 omni_provider = OmniVoiceProvider()
 voxcpm_provider = VoxCPMProvider()
+
+energy_vad_provider = EnergyVADProvider()
+webrtc_vad_provider = WebRTCVADProvider()
+silero_vad_provider = SileroVADProvider()
 
 @router.websocket("/voice")
 async def voice_websocket(websocket: WebSocket):
@@ -253,23 +258,88 @@ async def transcribe(
             tmp.write(content)
             temp_path = tmp.name
 
-        # 使用 librosa 加载音频（兼容性更好）
-        import librosa
-        data, sr = librosa.load(temp_path, sr=16000)
-            
-        # 调用 SenseVoice Provider
-        result = sensevoice_provider.transcribe(data)
+        model_key = model.lower()
+        text = ""
+
+        if "sensevoice" in model_key:
+            import librosa
+            data, sr = librosa.load(temp_path, sr=16000)
+            result = sensevoice_provider.transcribe(data)
+            text = result.get("text", "")
+        elif "vosk" in model_key:
+            import librosa
+            data, sr = librosa.load(temp_path, sr=16000)
+            pcm_bytes = (np.clip(data, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
+            text = vosk_provider.transcribe(pcm_bytes)
+        elif "qwen" in model_key:
+            text = qwen_asr_provider.transcribe(temp_path)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported ASR model: {model}")
         
-        logger.info(f"[ASR] Transcription result: {result.get('text')}")
-        resp = TranscriptionResponse(text=result.get("text", ""))
+        logger.info(f"[ASR] Transcription result: {text}")
+        resp = TranscriptionResponse(text=text)
         from fastapi.responses import JSONResponse
         return JSONResponse(
             content=resp.model_dump(),
             headers={"X-Model-Name": model},
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[ASR] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try: os.remove(temp_path)
+            except: pass
+
+@router.post("/vad")
+async def voice_activity_detection(
+    request: Request,
+    file: UploadFile = File(...),
+    engine: str = Form("silero"),
+    threshold: float = Form(0.02),
+    sensitivity: int = Form(2)
+):
+    request.state.model_name = f"vad_{engine}"
+    logger.info(f"[VAD] Request received. File: {file.filename}, Engine: {engine}")
+
+    temp_path = None
+    import time
+    start_time = time.time()
+    try:
+        suffix = os.path.splitext(file.filename)[1] if file.filename else ".webm"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            content = await file.read()
+            tmp.write(content)
+            temp_path = tmp.name
+
+        import librosa
+        data, sr = librosa.load(temp_path, sr=16000)
+
+        engine_key = engine.lower()
+        if "energy" in engine_key:
+            provider = EnergyVADProvider(threshold=threshold)
+            segments = provider.segments(data, sample_rate=16000)
+        elif "webrtc" in engine_key:
+            provider = WebRTCVADProvider(mode=sensitivity)
+            segments = provider.segments(data, sample_rate=16000)
+        elif "silero" in engine_key:
+            segments = silero_vad_provider.segments(data, sample_rate=16000)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported VAD engine: {engine}")
+
+        duration = time.time() - start_time
+        return {
+            "engine": engine,
+            "segments": segments,
+            "process_time_ms": round(duration * 1000, 2)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[VAD] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if temp_path and os.path.exists(temp_path):

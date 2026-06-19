@@ -8,7 +8,9 @@ import {
   ChevronDown,
   Cpu,
   Radio,
-  Settings
+  Settings,
+  Activity,
+  BookOpen
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -20,6 +22,8 @@ interface SidebarProps {
 const MENU_ITEMS = [
   { id: 'overview', label: '概览', icon: LayoutDashboard },
   { id: 'conversation', label: '实时对话', icon: Radio },
+  { id: 'vad', label: 'VAD 语音检测', icon: Activity },
+  { id: 'tutorials', label: '实战与原理教程', icon: BookOpen },
 ];
 
 const ASR_PROVIDERS = [
@@ -47,9 +51,9 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   };
 
   return (
-    <aside className="w-64 border-r border-[var(--card-border)] flex flex-col p-6 bg-[var(--sidebar-bg)] transition-colors duration-300">
+    <aside className="w-64 border-r border-[var(--card-border)] flex flex-col py-6 bg-[var(--sidebar-bg)] transition-colors duration-300">
       {/* Logo */}
-      <div className="flex items-center gap-3 mb-10 px-2">
+      <div className="flex items-center gap-3 mb-10 px-6">
         <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20 text-white">
           <Cpu size={20} />
         </div>
@@ -57,7 +61,7 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       </div>
 
       {/* 主菜单 */}
-      <nav className="flex-1 space-y-1 overflow-y-auto">
+      <nav className="flex-1 space-y-1 overflow-y-auto pl-6 pr-2">
         {MENU_ITEMS.map(item => (
           <NavItem
             key={item.id}
@@ -116,7 +120,7 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       </nav>
 
       {/* 底部：固定的系统配置入口 */}
-      <div className="mt-auto pt-2 border-t border-[var(--card-border)]">
+      <div className="mt-auto pt-4 mx-6 border-t border-[var(--card-border)]">
         <button
           onClick={() => onTabChange('system-config')}
           className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-all ${

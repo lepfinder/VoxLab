@@ -51,6 +51,7 @@ cd dashboard
 npm run dev
 
 # 窗口 B: 启动后端代理
+conda activate voxlab
 DEV_MODE=true python main.py
 ```
 访问：`http://localhost:8001`

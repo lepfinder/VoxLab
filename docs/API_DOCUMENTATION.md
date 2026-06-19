@@ -59,7 +59,7 @@
 - **路径**: `/api/v1/audio/speech`
 - **方法**: `POST`
 - **参数**:
-  - `model`: 模型 ID (`kokoro`, `qwen`, `voxcpm`, `edge-tts`)
+  - `model`: 模型 ID (`kokoro`, `qwen`, `voxcpm`, `omni`, `edge-tts`)
   - `input`: 目标文本
   - `voice`: 发音人 ID (如 `af_heart` 或 Qwen 对应的参考音频)
 - **示例**:
@@ -76,25 +76,57 @@
 
 ---
 
-## 4. 系统管理 (Admin) 接口
-主要供管理后台使用。
+## 4. 声纹特征提取 (Voiceprint) 接口
+用于提取音频文件中的人声声纹高维特征向量。
 
-- **获取状态**: `GET /admin/stats`
-- **模型列表**: `GET /admin/models`
-- **Token 管理**:
-  - 列出: `GET /admin/tokens`
-  - 创建: `POST /admin/tokens` (Body: `{"name": "token_name"}`)
-  - 删除: `DELETE /admin/tokens/{token_id}`
-- **审计日志**: `GET /admin/logs`
+- **路径**: `/api/v1/voiceprint/extract`
+- **方法**: `POST`
+- **参数**:
+  - `file`: 音频文件 (multipart/form-data)
+- **示例**:
+  ```bash
+  curl http://localhost:8001/api/v1/voiceprint/extract \
+    -H "Authorization: Bearer sk-your-token" \
+    -F "file=@voice.wav"
+  ```
+- **返回**:
+  ```json
+  {
+    "embedding": [
+      0.0123,
+      -0.0456,
+      0.789
+    ]
+  }
+  ```
 
 ---
 
-## 5. 核心特性说明
+## 5. 实时语音流 (ASR) WebSocket 接口
+用于建立长连接，实时发送音频流并接收转写结果（适用于硬件对接及低延迟对话场景）。
 
-### 5.1 内存自动管理
+- **路径**: `ws://localhost:8001/api/v1/audio/voice`
+- **协议**: `WebSocket`
+- **通信流程**:
+  1. 客户端建立 WebSocket 连接。
+  2. 客户端以二进制帧的形式持续发送 **Opus 编码** 的音频数据（推荐采样率 16000Hz，单声道，每帧大小 960 字节/60ms）。
+  3. 服务端内置静音检测（VAD），当检测到说话结束时，自动进行转写，并向客户端推送转写结果。
+- **服务端推送结果格式 (JSON)**:
+  ```json
+  {
+    "type": "asr_result",
+    "text": "今天天气怎么样"
+  }
+  ```
+
+---
+
+## 6. 核心特性说明
+
+### 6.1 内存自动管理
 系统内置了 **ModelManager**。模型在首次被调用时按需加载。如果 **10 分钟**内没有新的请求，模型将自动从显存/内存中卸载，确保不长时间占用系统资源。
 
-### 5.2 错误码参考
+### 6.2 错误码参考
 - `401 Unauthorized`: 未提供 Token 或 Token 无效。
 - `400 Bad Request`: 参数错误或不支持的模型类型。
 - `502 Upstream Error`: 开发模式下前端代理转发失败。

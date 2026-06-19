@@ -119,9 +119,9 @@ if DEV_MODE:
     from fastapi.responses import StreamingResponse
     
     # 全局代理客户端
-    proxy_client = httpx.AsyncClient(base_url="http://localhost:7898")
+    proxy_client = httpx.AsyncClient(base_url="http://127.0.0.1:7898", timeout=None)
 
-    logger.info("Running in DEV_MODE: Proxying frontend to http://localhost:7898")
+    logger.info("Running in DEV_MODE: Proxying frontend to http://127.0.0.1:7898")
     
     @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
     async def proxy_frontend(path: str, request: Request):
@@ -152,7 +152,7 @@ if DEV_MODE:
                 background=None
             )
         except Exception as e:
-            logger.error(f"Proxy error: {e}")
+            logger.error(f"Proxy error: {e}", exc_info=True)
             return JSONResponse(status_code=502, content={"detail": "Upstream error"})
 
 elif os.path.exists(STATIC_DIR):

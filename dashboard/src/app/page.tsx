@@ -15,11 +15,15 @@ import OmniPage from './components/tts/OmniPage';
 import EdgePage from './components/tts/EdgePage';
 import ConversationPage from './components/ConversationPage';
 import SystemConfigPage from './components/SystemConfigPage';
+import VadPage from './components/vad/VadPage';
+import TutorialsPage from './components/tutorials/TutorialsPage';
 
 // 页面标题映射
 const PAGE_TITLES: Record<string, string> = {
   overview: '系统概览',
   conversation: '实时对话',
+  vad: 'VAD 语音检测',
+  tutorials: '实战与原理教程',
   'asr-sensevoice': 'SenseVoice',
   'asr-qwen': 'Qwen ASR',
   'asr-vosk': 'Vosk',
@@ -91,6 +95,10 @@ export default function AdminDashboard() {
         return <Tokens tokens={tokens} onCreateToken={handleCreateToken} onDeleteToken={handleDeleteToken} />;
       case 'logs':
         return <Logs logs={logs} />;
+      case 'vad':
+        return <VadPage selectedKey={selectedKey} />;
+      case 'tutorials':
+        return <TutorialsPage />;
       case 'conversation':
         return <ConversationPage selectedKey={selectedKey} onJumpToConfig={() => setActiveTab('system-config')} />;
       case 'system-config':
@@ -141,7 +149,9 @@ export default function AdminDashboard() {
             {/* 页面标题 - 仅在非模型/非配置页显示 */}
             {!activeTab.startsWith('asr-')
               && !activeTab.startsWith('tts-')
-              && activeTab !== 'system-config' && (
+              && activeTab !== 'system-config'
+              && activeTab !== 'vad'
+              && activeTab !== 'tutorials' && (
               <header className="mb-10">
                 <h1 className="text-3xl font-bold mb-2">
                   {PAGE_TITLES[activeTab] || 'VoxLab'}

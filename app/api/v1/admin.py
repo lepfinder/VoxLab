@@ -93,3 +93,71 @@ async def get_model_doc(model: str, filename: str):
         raise HTTPException(status_code=404, detail=f"Document not found: {model}/{filename}")
     with open(file_path, 'r', encoding='utf-8') as f:
         return PlainTextResponse(content=f.read(), media_type="text/markdown; charset=utf-8")
+
+
+# --- 系统级实战教程接口 ---
+TUTORIALS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "docs", "tutorials")
+
+@router.get("/tutorials")
+async def list_tutorials():
+    """扫描 docs/tutorials 目录，返回两级嵌套 JSON"""
+    if not os.path.isdir(TUTORIALS_DIR):
+        return []
+    
+    chapters = []
+    # 获取所有 chapter 目录
+    for item in sorted(os.listdir(TUTORIALS_DIR)):
+        item_path = os.path.join(TUTORIALS_DIR, item)
+        if os.path.isdir(item_path) and item.startswith("chapter"):
+            chapter_title = ""
+            if "theory" in item:
+                chapter_title = "第 1 章：声学与语音 AI 原理基础"
+            elif "hardware" in item:
+                chapter_title = "第 2 章：ESP32 硬件与 WebSocket 对接"
+            else:
+                chapter_title = item.replace("_", " ").title()
+
+            sections = []
+            # 获取目录下的所有 .md 文件
+            for file_name in sorted(os.listdir(item_path)):
+                if file_name.endswith(".md"):
+                    file_path = os.path.join(item_path, file_name)
+                    sec_title = file_name.replace(".md", "").replace("_", " ").title()
+                    try:
+                        with open(file_path, "r", encoding="utf-8") as f:
+                            first_line = f.readline().strip()
+                            if first_line.startswith("# "):
+                                sec_title = first_line.lstrip("# ").strip()
+                    except Exception:
+                        pass
+                    
+                    sections.append({
+                        "id": file_name.replace(".md", ""),
+                        "title": sec_title
+                    })
+            
+            chapters.append({
+                "id": item,
+                "title": chapter_title,
+                "sections": sections
+            })
+    
+    return chapters
+
+
+@router.get("/tutorials/{chapter_id}/{section_id}")
+async def get_tutorial_section(chapter_id: str, section_id: str):
+    """读取指定小节的 Markdown 内容"""
+    if '..' in chapter_id or '..' in section_id:
+        raise HTTPException(status_code=400, detail="Invalid path")
+        
+    file_path = os.path.join(TUTORIALS_DIR, chapter_id, f"{section_id}.md")
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail=f"Section not found: {chapter_id}/{section_id}")
+        
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return PlainTextResponse(content=content, media_type="text/markdown; charset=utf-8")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
