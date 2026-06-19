@@ -9,15 +9,30 @@ interface Speaker {
   description: string;
   avatar: string;
   system_prompt: string;
-  asr_provider: string;
+  voice_id: string;
+  llm_config_id?: string;
+  llm_model?: string;
+  is_preset: number;
+}
+
+interface Voice {
+  id: string;
+  name: string;
+  description: string;
   tts_provider: string;
   tts_voice: string;
-  vad_provider: string;
-  is_preset: number;
+}
+
+interface LlmConfig {
+  id: string;
+  name: string;
+  model: string;
 }
 
 export default function SpeakersPage() {
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
+  const [voices, setVoices] = useState<Voice[]>([]);
+  const [llmConfigs, setLlmConfigs] = useState<LlmConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingSpeaker, setEditingSpeaker] = useState<Partial<Speaker> | null>(null);
@@ -26,10 +41,13 @@ export default function SpeakersPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
-  const [asrProvider, setAsrProvider] = useState('sensevoice');
-  const [ttsProvider, setTtsProvider] = useState('kokoro');
-  const [ttsVoice, setTtsVoice] = useState('');
-  const [vadProvider, setVadProvider] = useState('silero');
+  const [voiceId, setVoiceId] = useState('');
+  const [llmConfigId, setLlmConfigId] = useState('');
+  const [llmModel, setLlmModel] = useState('');
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+
+
 
   const fetchSpeakers = async () => {
     try {
@@ -43,19 +61,64 @@ export default function SpeakersPage() {
     }
   };
 
+  const fetchVoices = async () => {
+    try {
+      const res = await fetch('/admin/voices');
+      const data = await res.json();
+      setVoices(data);
+      if (data.length > 0 && !voiceId) {
+        setVoiceId(data[0].id);
+      }
+    } catch (e) {
+      console.error('获取音色列表失败', e);
+    }
+  };
+
+  const fetchLlmConfigs = async () => {
+    try {
+      const res = await fetch('/admin/llm/configs');
+      const data = await res.json();
+      setLlmConfigs(data);
+    } catch (e) {
+      console.error('获取LLM配置失败', e);
+    }
+  };
+
   useEffect(() => {
     fetchSpeakers();
+    fetchVoices();
+    fetchLlmConfigs();
   }, []);
+
+  useEffect(() => {
+    if (!llmConfigId) {
+      setAvailableModels([]);
+      return;
+    }
+    const fetchModels = async () => {
+      setLoadingModels(true);
+      try {
+        const res = await fetch(`/admin/llm/configs/${llmConfigId}/models`);
+        const data = await res.json();
+        setAvailableModels(data.models || []);
+      } catch (e) {
+        console.error('获取供应商模型列表失败', e);
+        setAvailableModels([]);
+      } finally {
+        setLoadingModels(false);
+      }
+    };
+    fetchModels();
+  }, [llmConfigId]);
 
   const handleOpenAdd = () => {
     setEditingSpeaker(null);
     setName('');
     setDescription('');
     setSystemPrompt('');
-    setAsrProvider('sensevoice');
-    setTtsProvider('kokoro');
-    setTtsVoice('am_nicole');
-    setVadProvider('silero');
+    setVoiceId(voices[0]?.id || 'haruna');
+    setLlmConfigId('');
+    setLlmModel('');
     setShowModal(true);
   };
 
@@ -64,17 +127,16 @@ export default function SpeakersPage() {
     setName(sp.name);
     setDescription(sp.description);
     setSystemPrompt(sp.system_prompt);
-    setAsrProvider(sp.asr_provider);
-    setTtsProvider(sp.tts_provider);
-    setTtsVoice(sp.tts_voice);
-    setVadProvider(sp.vad_provider);
+    setVoiceId(sp.voice_id);
+    setLlmConfigId(sp.llm_config_id || '');
+    setLlmModel(sp.llm_model || '');
     setShowModal(true);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !systemPrompt.trim() || !ttsVoice.trim()) {
-      alert('请填写必要字段（名称、系统指令、TTS 音色）');
+    if (!name.trim() || !systemPrompt.trim() || !voiceId) {
+      alert('请填写必要字段（名称、系统指令、音色选择）');
       return;
     }
 
@@ -84,10 +146,9 @@ export default function SpeakersPage() {
       description,
       avatar: editingSpeaker?.avatar || 'default',
       system_prompt: systemPrompt,
-      asr_provider: asrProvider,
-      tts_provider: ttsProvider,
-      tts_voice: ttsVoice,
-      vad_provider: vadProvider,
+      voice_id: voiceId,
+      llm_config_id: llmConfigId || undefined,
+      llm_model: llmModel || undefined,
     };
 
     try {
@@ -130,7 +191,7 @@ export default function SpeakersPage() {
         <div>
           <h1 className="text-3xl font-bold mb-2">发音人管理</h1>
           <p className="text-[var(--muted-text)] text-sm">
-            在这里您可以定制包含 ASR、LLM 指令、TTS 发音及 VAD 在内的综合发音人性格
+            在这里您可以定制包含 LLM 路由指令和内置系统音色在内的综合发音人性格
           </p>
         </div>
         <button
@@ -146,63 +207,68 @@ export default function SpeakersPage() {
         <div className="text-center py-12 text-[var(--muted-text)]">加载中...</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {speakers.map((sp) => (
-            <div
-              key={sp.id}
-              className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 flex flex-col justify-between hover:border-blue-500/30 hover:shadow-lg transition-all duration-300 relative group overflow-hidden"
-            >
-              {/* 预置发音人徽章 */}
-              {sp.is_preset === 1 && (
-                <div className="absolute top-0 right-0 bg-blue-600/10 text-blue-600 dark:text-blue-400 text-[10px] font-bold px-3 py-1 rounded-bl-xl border-l border-b border-blue-500/10 flex items-center gap-1">
-                  <UserCheck size={10} />
-                  系统预置
-                </div>
-              )}
-
-              <div>
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-12 h-12 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center font-bold text-lg text-blue-600">
-                    {sp.name.slice(0, 1)}
+          {speakers.map((sp) => {
+            const matchedVoice = voices.find(v => v.id === sp.voice_id);
+            const matchedLlm = llmConfigs.find(l => l.id === sp.llm_config_id);
+            return (
+              <div
+                key={sp.id}
+                className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 flex flex-col justify-between hover:border-blue-500/30 hover:shadow-lg transition-all duration-300 relative group overflow-hidden"
+              >
+                {/* 预置发音人徽章 */}
+                {sp.is_preset === 1 && (
+                  <div className="absolute top-0 right-0 bg-blue-600/10 text-blue-600 dark:text-blue-400 text-[10px] font-bold px-3 py-1 rounded-bl-xl border-l border-b border-blue-500/10 flex items-center gap-1">
+                    <UserCheck size={10} />
+                    系统预置
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-lg">{sp.name}</h3>
-                    <p className="text-xs text-[var(--muted-text)] line-clamp-1">{sp.description || '暂无描述'}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-2 my-4 text-xs">
-                  <div className="bg-[var(--background)] px-3 py-2 rounded-lg border border-[var(--card-border)] line-clamp-2 italic text-[var(--muted-text)]">
-                    &ldquo;{sp.system_prompt}&rdquo;
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-[10px] text-[var(--muted-text)] font-mono">
-                    <span className="bg-gray-500/5 px-2 py-1 rounded">ASR: {sp.asr_provider}</span>
-                    <span className="bg-gray-500/5 px-2 py-1 rounded">VAD: {sp.vad_provider}</span>
-                    <span className="bg-blue-500/5 text-blue-600 dark:text-blue-400 px-2 py-1 rounded col-span-2">
-                      TTS: {sp.tts_provider} ({sp.tts_voice})
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-2 border-t border-[var(--card-border)] pt-4 mt-2">
-                <button
-                  onClick={() => handleOpenEdit(sp)}
-                  className="flex-1 py-2 bg-[var(--background)] hover:bg-[var(--card-border)] border border-[var(--card-border)] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95"
-                >
-                  <Edit2 size={13} />
-                  编辑
-                </button>
-                {sp.is_preset !== 1 && (
-                  <button
-                    onClick={() => handleDelete(sp.id)}
-                    className="px-3 py-2 text-red-500 hover:bg-red-500/10 border border-transparent rounded-xl transition-all active:scale-95"
-                  >
-                    <Trash2 size={15} />
-                  </button>
                 )}
+
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-12 h-12 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center font-bold text-lg text-blue-600">
+                      {sp.name.slice(0, 1)}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-lg">{sp.name}</h3>
+                      <p className="text-xs text-[var(--muted-text)] line-clamp-1">{sp.description || '暂无描述'}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 my-4 text-xs">
+                    <div className="bg-[var(--background)] px-3 py-2 rounded-lg border border-[var(--card-border)] line-clamp-2 italic text-[var(--muted-text)]">
+                      &ldquo;{sp.system_prompt}&rdquo;
+                    </div>
+                    <div className="flex flex-col gap-1.5 text-[10px] text-[var(--muted-text)] font-mono">
+                      <span className="bg-blue-500/5 text-blue-600 dark:text-blue-400 px-2 py-1 rounded w-fit">
+                        音色: {matchedVoice ? `${matchedVoice.name} (${matchedVoice.tts_provider})` : sp.voice_id}
+                      </span>
+                      <span className="bg-gray-500/5 px-2 py-1 rounded w-fit">
+                        LLM: {matchedLlm ? matchedLlm.name : '系统默认'} {sp.llm_model ? `(${sp.llm_model})` : ''}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 border-t border-[var(--card-border)] pt-4 mt-2">
+                  <button
+                    onClick={() => handleOpenEdit(sp)}
+                    className="flex-1 py-2 bg-[var(--background)] hover:bg-[var(--card-border)] border border-[var(--card-border)] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                  >
+                    <Edit2 size={13} />
+                    编辑
+                  </button>
+                  {sp.is_preset !== 1 && (
+                    <button
+                      onClick={() => handleDelete(sp.id)}
+                      className="px-3 py-2 text-red-500 hover:bg-red-500/10 border border-transparent rounded-xl transition-all active:scale-95"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -256,67 +322,59 @@ export default function SpeakersPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider">
-                    ASR 识别引擎
-                  </label>
-                  <select
-                    value={asrProvider}
-                    onChange={(e) => setAsrProvider(e.target.value)}
-                    className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none"
-                  >
-                    <option value="sensevoice">SenseVoice</option>
-                    <option value="qwen">Qwen ASR</option>
-                    <option value="vosk">Vosk</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider">
-                    VAD 检测算法
-                  </label>
-                  <select
-                    value={vadProvider}
-                    onChange={(e) => setVadProvider(e.target.value)}
-                    className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none"
-                  >
-                    <option value="silero">Silero VAD</option>
-                    <option value="webrtc">WebRTC VAD</option>
-                    <option value="energy">Energy VAD</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider">
+                  选择音色 *
+                </label>
+                <select
+                  value={voiceId}
+                  onChange={(e) => setVoiceId(e.target.value)}
+                  className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none"
+                >
+                  {voices.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name} ({v.tts_provider}) - {v.description || '暂无描述'}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider">
-                    TTS 发声引擎
+                    关联 LLM 供应商
                   </label>
                   <select
-                    value={ttsProvider}
-                    onChange={(e) => setTtsProvider(e.target.value)}
+                    value={llmConfigId}
+                    onChange={(e) => setLlmConfigId(e.target.value)}
                     className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none"
                   >
-                    <option value="kokoro">Kokoro</option>
-                    <option value="edge">Edge TTS</option>
-                    <option value="qwen">Qwen TTS</option>
-                    <option value="voxcpm">VoxCPM</option>
+                    <option value="">使用系统默认 LLM 配置</option>
+                    {llmConfigs.map((cfg) => (
+                      <option key={cfg.id} value={cfg.id}>
+                        {cfg.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider">
-                    音色名称 (Voice) *
+                    指定 LLM 模型
                   </label>
                   <input
                     type="text"
-                    required
-                    placeholder="如: am_nicole, zh-CN-YunxiNeural"
-                    value={ttsVoice}
-                    onChange={(e) => setTtsVoice(e.target.value)}
-                    className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    list="available-llm-models"
+                    placeholder={loadingModels ? "正在获取模型列表..." : "选填，可选择或输入模型"}
+                    value={llmModel}
+                    onChange={(e) => setLlmModel(e.target.value)}
+                    className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   />
+                  <datalist id="available-llm-models">
+                    {availableModels.map((m) => (
+                      <option key={m} value={m} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 

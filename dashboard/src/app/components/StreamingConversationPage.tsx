@@ -30,10 +30,9 @@ interface Speaker {
   description: string;
   avatar: string;
   system_prompt: string;
-  asr_provider: string;
-  tts_provider: string;
-  tts_voice: string;
-  vad_provider: string;
+  voice_id: string;
+  llm_config_id?: string;
+  llm_model?: string;
   is_preset: number;
 }
 
@@ -457,8 +456,8 @@ export default function StreamingConversationPage({ selectedKey, onJumpToConfig 
             </div>
             <button
               onClick={onJumpToConfig}
-              className="p-2 hover:bg-[var(--foreground)]/5 rounded-xl transition-all border border-transparent hover:border-[var(--card-border)] text-[var(--muted-text)]"
-              title="配置发音人角色"
+              className="p-2 hover:bg-[var(--foreground)]/5 rounded-xl transition-all border border-transparent hover:border-[var(--card-border)] text-[var(--muted-text)] flex items-center justify-center"
+              title="管理发音人角色"
             >
               <Settings size={18} />
             </button>

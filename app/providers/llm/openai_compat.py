@@ -23,6 +23,31 @@ class OpenAICompatClient:
             return f"{self.base_url}/chat/completions"
         return f"{self.base_url}/v1/chat/completions"
 
+    async def list_models(self) -> List[str]:
+        """从上游服务商获取可用的模型列表"""
+        if self.base_url.endswith("/v1") or "/v1/" in self.base_url:
+            models_url = f"{self.base_url}/models"
+        else:
+            models_url = f"{self.base_url}/v1/models"
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Accept": "application/json",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(models_url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    models_list = data.get("data", [])
+                    return [m.get("id") for m in models_list if m.get("id")]
+                else:
+                    logger.warning(f"Failed to fetch models from {models_url}, status code: {resp.status_code}")
+                    return []
+        except Exception as e:
+            logger.warning(f"Failed to fetch models from {models_url}: {e}")
+            return []
+
     async def stream_chat(
         self,
         messages: List[Dict[str, str]],

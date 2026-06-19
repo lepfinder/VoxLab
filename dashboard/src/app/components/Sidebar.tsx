@@ -25,6 +25,7 @@ const MENU_ITEMS = [
   { id: 'overview', label: '概览', icon: LayoutDashboard },
   { id: 'conversation', label: '智能通话间', icon: Radio },
   { id: 'speakers', label: '发音人管理', icon: Users2 },
+  { id: 'voices', label: '音色管理', icon: Volume2 },
   { id: 'vad', label: 'VAD 语音检测', icon: Activity },
   { id: 'tutorials', label: '实战与原理教程', icon: BookOpen },
   { id: 'api-docs', label: 'API 文档', icon: FileText },

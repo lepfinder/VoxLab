@@ -15,6 +15,7 @@ import OmniPage from './components/tts/OmniPage';
 import EdgePage from './components/tts/EdgePage';
 import SystemConfigPage from './components/SystemConfigPage';
 import SpeakersPage from './components/SpeakersPage';
+import VoicesPage from './components/VoicesPage';
 import VadPage from './components/vad/VadPage';
 import TutorialsPage from './components/tutorials/TutorialsPage';
 import ApiDocsPage from './components/ApiDocsPage';
@@ -26,6 +27,7 @@ const PAGE_TITLES: Record<string, string> = {
   overview: '系统概览',
   conversation: '智能通话间',
   speakers: '发音人管理',
+  voices: '音色管理',
   vad: 'VAD 语音检测',
   tutorials: '实战与原理教程',
   'api-docs': 'API 接口文档',
@@ -111,6 +113,8 @@ export default function AdminDashboard() {
         return <ApiDocsPage />;
       case 'speakers':
         return <SpeakersPage />;
+      case 'voices':
+        return <VoicesPage />;
       case 'conversation':
         return (
           <div className="flex flex-col flex-1 min-h-0 gap-4">
@@ -143,9 +147,9 @@ export default function AdminDashboard() {
               </p>
             </div>
             {convMode === 'http' ? (
-              <ConversationPage selectedKey={selectedKey} onJumpToConfig={() => setActiveTab('system-config')} />
+              <ConversationPage selectedKey={selectedKey} onJumpToConfig={() => setActiveTab('speakers')} />
             ) : (
-              <StreamingConversationPage selectedKey={selectedKey} onJumpToConfig={() => setActiveTab('system-config')} />
+              <StreamingConversationPage selectedKey={selectedKey} onJumpToConfig={() => setActiveTab('speakers')} />
             )}
           </div>
         );
@@ -205,6 +209,7 @@ export default function AdminDashboard() {
               && activeTab !== 'vad'
               && activeTab !== 'tutorials'
               && activeTab !== 'speakers'
+              && activeTab !== 'voices'
               && activeTab !== 'api-docs' && (
               <header className="mb-10">
                 <h1 className="text-3xl font-bold mb-2">

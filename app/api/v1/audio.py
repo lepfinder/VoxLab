@@ -123,8 +123,9 @@ async def agent_websocket(websocket: WebSocket):
     if "conversation_id" in params:
         conversation_id = params["conversation_id"]
 
-    # Load speaker
+    # Load speaker & voice info
     speaker = db.get_speaker(speaker_id) or db.get_speaker("haruna")
+    voice_info = db.get_voice(speaker["voice_id"]) if speaker and speaker.get("voice_id") else None
     system_prompt = speaker["system_prompt"] if speaker else "You are a helpful AI assistant."
     
     # Initialize message list
@@ -172,17 +173,24 @@ async def agent_websocket(websocket: WebSocket):
                 db.add_message(str(uuid.uuid4()), conversation_id, "user", user_text)
             messages.append({"role": "user", "content": user_text})
 
-            # 2. Get default LLM config
-            config = db.get_default_llm_config()
+            # 2. Get LLM config
+            config = None
+            if speaker and speaker.get("llm_config_id"):
+                config = db.get_llm_config(speaker["llm_config_id"])
+            if not config:
+                config = db.get_default_llm_config()
+                
             if not config:
                 logger.error("[WS Agent] LLM config not found")
                 await websocket.send_json({"type": "error", "message": "LLM config not found"})
                 return
 
+            llm_model = (speaker.get("llm_model") if speaker else None) or config["model"]
+
             client = OpenAICompatClient(
                 base_url=config["base_url"],
                 api_key=config["api_key"],
-                model=config["model"],
+                model=llm_model,
             )
 
             # Send LLM start
@@ -195,9 +203,9 @@ async def agent_websocket(websocket: WebSocket):
             
             # Helper to run TTS for a sentence and stream chunks
             async def run_tts_and_stream(text_to_synthesize: str):
-                nonlocal speaker
-                tts_provider_name = speaker["tts_provider"].lower() if speaker else "edge"
-                tts_voice = speaker["tts_voice"] if speaker else "zh-CN-XiaoxiaoNeural"
+                nonlocal voice_info
+                tts_provider_name = voice_info["tts_provider"].lower() if voice_info else "edge"
+                tts_voice = voice_info["tts_voice"] if voice_info else "zh-CN-XiaoxiaoNeural"
                 
                 logger.info(f"[WS Agent] Synthesis sentence: {text_to_synthesize}")
                 try:
@@ -341,8 +349,8 @@ async def agent_websocket(websocket: WebSocket):
                                 audio_buffer = []
                                 speaking = False
                                 
-                                # Run ASR
-                                asr_provider_name = speaker["asr_provider"].lower() if speaker else "sensevoice"
+                                # Run ASR (ASR now defaults to sensevoice system-wide)
+                                asr_provider_name = "sensevoice"
                                 text = ""
                                 try:
                                     if "sensevoice" in asr_provider_name:
@@ -384,6 +392,7 @@ async def agent_websocket(websocket: WebSocket):
                         speaker_id = cmd.get("speaker_id", speaker_id)
                         conversation_id = cmd.get("conversation_id", conversation_id)
                         speaker = db.get_speaker(speaker_id) or speaker
+                        voice_info = db.get_voice(speaker["voice_id"]) if speaker and speaker.get("voice_id") else voice_info
                         system_prompt = speaker["system_prompt"] if speaker else system_prompt
                         messages = [{"role": "system", "content": system_prompt}]
                         if conversation_id:
@@ -406,6 +415,12 @@ async def agent_websocket(websocket: WebSocket):
 
 @router.post("/speech")
 async def speech(request_body: SpeechRequest, request: Request):
+    from app.core.database import db
+    voice_info = db.get_voice(request_body.voice)
+    if voice_info:
+        request_body.model = voice_info["tts_provider"]
+        request_body.voice = voice_info["tts_voice"]
+
     request.state.model_name = request_body.model
     model_key = request_body.model.lower()
     output_path = None
@@ -562,9 +577,9 @@ async def speech_by_speaker(request_body: SpeakerSpeechRequest, request: Request
     from app.schemas.openai import SpeechRequest
     # 如果是 opus，则请求 opus，其它则按传入格式生成
     speech_req = SpeechRequest(
-        model=sp["tts_provider"],
+        model="auto",
         input=request_body.text,
-        voice=sp["tts_voice"],
+        voice=sp["voice_id"],
         response_format=request_body.response_format
     )
     return await speech(speech_req, request)

@@ -75,7 +75,7 @@ export default function Overview({ stats, logs, isDarkMode }: OverviewProps) {
   );
 }
 
-function StatCard({ title, value, icon, trend }: { title: string; value: number; icon: React.ReactNode; trend: string }) {
+function StatCard({ title, value, icon, trend }: { title: string; value: number | string; icon: React.ReactNode; trend: string }) {
   return (
     <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 hover:border-blue-500/30 transition-all shadow-sm">
       <div className="flex justify-between items-start mb-4">

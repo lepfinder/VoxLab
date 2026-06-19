@@ -28,10 +28,9 @@ interface Speaker {
   description: string;
   avatar: string;
   system_prompt: string;
-  asr_provider: string;
-  tts_provider: string;
-  tts_voice: string;
-  vad_provider: string;
+  voice_id: string;
+  llm_config_id?: string;
+  llm_model?: string;
   is_preset: number;
 }
 
@@ -216,9 +215,9 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
           Authorization: `Bearer ${selectedKey}`,
         },
         body: JSON.stringify({
-          model: activeSpeaker.tts_provider,
+          model: 'auto',
           input: responseText,
-          voice: activeSpeaker.tts_voice,
+          voice: activeSpeaker.voice_id,
           response_format: 'mp3',
         }),
       });
@@ -283,7 +282,7 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
     try {
       const form = new FormData();
       form.append('file', blob, 'utterance.webm');
-      form.append('model', activeSpeaker.asr_provider);
+      form.append('model', 'sensevoice');
       const res = await fetch('/api/v1/audio/transcriptions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${selectedKey}` },
@@ -448,8 +447,8 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
           </div>
           <button
             onClick={onJumpToConfig}
-            className="p-2 hover:bg-[var(--foreground)]/5 rounded-xl transition-all border border-transparent hover:border-[var(--card-border)] text-[var(--muted-text)]"
-            title="发音人全局底座配置"
+            className="p-2 hover:bg-[var(--foreground)]/5 rounded-xl transition-all border border-transparent hover:border-[var(--card-border)] text-[var(--muted-text)] flex items-center justify-center"
+            title="管理发音人角色"
           >
             <Settings size={18} />
           </button>
@@ -645,9 +644,9 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
           <span className="flex items-center gap-1">
             {error && <span className="text-red-500 flex items-center gap-0.5"><AlertCircle size={10} />错误</span>}
             {!error && <span className="text-green-500">●</span>}
-            VAD: {activeSpeaker?.vad_provider || 'silero'}
+            音色: {activeSpeaker?.voice_id || '默认'}
           </span>
-          <span>ASR: {activeSpeaker?.asr_provider || 'sensevoice'}</span>
+          <span>模型: {activeSpeaker?.llm_model || '系统默认'}</span>
         </div>
 
       </div>
