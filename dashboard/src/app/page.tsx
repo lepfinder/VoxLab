@@ -18,6 +18,8 @@ import SpeakersPage from './components/SpeakersPage';
 import VadPage from './components/vad/VadPage';
 import TutorialsPage from './components/tutorials/TutorialsPage';
 import ApiDocsPage from './components/ApiDocsPage';
+import ConversationPage from './components/ConversationPage';
+import StreamingConversationPage from './components/StreamingConversationPage';
 
 // 页面标题映射
 const PAGE_TITLES: Record<string, string> = {
@@ -46,6 +48,8 @@ export default function AdminDashboard() {
   const [selectedKey, setSelectedKey] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [convMode, setConvMode] = useState<'http' | 'ws'>('http');
+
 
   const API_BASE = '/admin';
 
@@ -108,10 +112,44 @@ export default function AdminDashboard() {
       case 'speakers':
         return <SpeakersPage />;
       case 'conversation':
-        {
-          const ConversationPage = require('./components/ConversationPage').default;
-          return <ConversationPage selectedKey={selectedKey} onJumpToConfig={() => setActiveTab('system-config')} />;
-        }
+        return (
+          <div className="flex flex-col flex-1 min-h-0 gap-4">
+
+            <div className="flex justify-between items-center bg-[var(--card-bg)] border border-[var(--card-border)] p-2 rounded-2xl">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setConvMode('http')}
+                  className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                    convMode === 'http'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-[var(--muted-text)] hover:text-[var(--foreground)]'
+                  }`}
+                >
+                  API 基础模式 (HTTP)
+                </button>
+                <button
+                  onClick={() => setConvMode('ws')}
+                  className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                    convMode === 'ws'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-[var(--muted-text)] hover:text-[var(--foreground)]'
+                  }`}
+                >
+                  WS 实时流式模式 (WebSocket)
+                </button>
+              </div>
+              <p className="text-[var(--muted-text)] text-xs pr-2">
+                {convMode === 'http' ? '逐轮请求，适合低频串联教学演示' : '低延迟双向全双工，支持随时打断与实时播音'}
+              </p>
+            </div>
+            {convMode === 'http' ? (
+              <ConversationPage selectedKey={selectedKey} onJumpToConfig={() => setActiveTab('system-config')} />
+            ) : (
+              <StreamingConversationPage selectedKey={selectedKey} onJumpToConfig={() => setActiveTab('system-config')} />
+            )}
+          </div>
+        );
+
 
       case 'system-config':
         return (
@@ -159,7 +197,7 @@ export default function AdminDashboard() {
         <main className={`flex-1 p-8 custom-scrollbar ${
           activeTab === 'conversation' || activeTab === 'vad' ? 'h-full overflow-hidden pb-8' : 'overflow-y-auto pb-24'
         }`}>
-          <div className={`${activeTab === 'conversation' || activeTab === 'vad' ? 'h-full' : ''} max-w-6xl mx-auto`}>
+          <div className={`${activeTab === 'conversation' || activeTab === 'vad' ? 'h-full flex flex-col' : ''} max-w-6xl mx-auto`}>
             {/* 页面标题 - 仅在非模型/非配置页显示 */}
             {!activeTab.startsWith('asr-')
               && !activeTab.startsWith('tts-')

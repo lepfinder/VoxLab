@@ -101,6 +101,309 @@ async def voice_websocket(websocket: WebSocket):
     except Exception as e:
         logger.error(f"[WS] Error: {e}")
 
+
+@router.websocket("/agent/ws")
+async def agent_websocket(websocket: WebSocket):
+    import base64
+    import re
+    import asyncio
+    from app.core.database import db
+    from app.providers.llm.openai_compat import OpenAICompatClient
+    
+    await websocket.accept()
+    logger.info("[WS Agent] Client connected")
+
+    speaker_id = "haruna"
+    conversation_id = None
+    
+    # Query parameters
+    params = websocket.query_params
+    if "speaker_id" in params:
+        speaker_id = params["speaker_id"]
+    if "conversation_id" in params:
+        conversation_id = params["conversation_id"]
+
+    # Load speaker
+    speaker = db.get_speaker(speaker_id) or db.get_speaker("haruna")
+    system_prompt = speaker["system_prompt"] if speaker else "You are a helpful AI assistant."
+    
+    # Initialize message list
+    messages = [{"role": "system", "content": system_prompt}]
+    if conversation_id:
+        db_msgs = db.list_messages(conversation_id)
+        for m in db_msgs:
+            messages.append({"role": m["role"], "content": m["content"]})
+
+    # Ensure Silero VAD is loaded
+    silero_vad_provider.load()
+
+    # VAD states
+    audio_buffer = []
+    speaking = False
+    samples_since_last_vad = 0
+    silence_timeout = 0.8  # seconds
+
+    # Response task manager
+    response_task = None
+
+    async def send_status(status_str: str):
+        try:
+            await websocket.send_json({"type": "status", "status": status_str})
+        except:
+            pass
+
+    async def interrupt_response():
+        nonlocal response_task
+        if response_task and not response_task.done():
+            response_task.cancel()
+            logger.info("[WS Agent] Cancelled active response task due to user interruption")
+            try:
+                await websocket.send_json({"type": "interrupt"})
+            except:
+                pass
+            await send_status("listening")
+
+    # Helper to generate LLM stream and cascade TTS
+    async def process_response(user_text: str):
+        nonlocal messages
+        try:
+            # 1. Update DB & messages
+            if conversation_id:
+                db.add_message(str(uuid.uuid4()), conversation_id, "user", user_text)
+            messages.append({"role": "user", "content": user_text})
+
+            # 2. Get default LLM config
+            config = db.get_default_llm_config()
+            if not config:
+                logger.error("[WS Agent] LLM config not found")
+                await websocket.send_json({"type": "error", "message": "LLM config not found"})
+                return
+
+            client = OpenAICompatClient(
+                base_url=config["base_url"],
+                api_key=config["api_key"],
+                model=config["model"],
+            )
+
+            # Send LLM start
+            await websocket.send_json({"type": "llm_start"})
+            await send_status("thinking")
+
+            # 3. Stream LLM and buffer sentences
+            sentence_buffer = ""
+            full_assistant_response = []
+            
+            # Helper to run TTS for a sentence and stream chunks
+            async def run_tts_and_stream(text_to_synthesize: str):
+                nonlocal speaker
+                tts_provider_name = speaker["tts_provider"].lower() if speaker else "edge"
+                tts_voice = speaker["tts_voice"] if speaker else "zh-CN-XiaoxiaoNeural"
+                
+                logger.info(f"[WS Agent] Synthesis sentence: {text_to_synthesize}")
+                try:
+                    if "edge" in tts_provider_name:
+                        async for chunk in edge_tts_provider.stream_generate(text_to_synthesize, tts_voice):
+                            if chunk:
+                                await websocket.send_json({
+                                    "type": "audio_chunk",
+                                    "audio": base64.b64encode(chunk).decode("utf-8")
+                                })
+                    elif "qwen" in tts_provider_name:
+                        p = QwenTTSProvider(mode="custom" if tts_voice != "None" else "design")
+                        for chunk in p.stream_generate(text_to_synthesize, voice=tts_voice):
+                            if chunk:
+                                await websocket.send_json({
+                                    "type": "audio_chunk",
+                                    "audio": base64.b64encode(chunk).decode("utf-8")
+                                })
+                    else:
+                        # Fallback for non-stream models (kokoro, omni, voxcpm)
+                        path = None
+                        if "kokoro" in tts_provider_name:
+                            p = KokoroProvider()
+                            audio_np = p.generate(text_to_synthesize, voice=tts_voice)
+                            if audio_np is not None:
+                                import librosa
+                                audio_16k = librosa.resample(audio_np, orig_sr=24000, target_sr=16000)
+                                full_pcm_data = (np.clip(audio_16k, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
+                                for i in range(0, len(full_pcm_data), 4096):
+                                    await websocket.send_json({
+                                        "type": "audio_chunk",
+                                        "audio": base64.b64encode(full_pcm_data[i:i+4096]).decode("utf-8")
+                                    })
+                        elif "omni" in tts_provider_name:
+                            path = omni_provider.generate(text_to_synthesize)
+                        elif "vox" in tts_provider_name:
+                            path = voxcpm_provider.generate(text_to_synthesize)
+                        
+                        if path and os.path.exists(path):
+                            data, sr = sf.read(path, dtype='int16')
+                            if sr != 16000:
+                                import librosa
+                                data = librosa.resample(data.astype(np.float32), orig_sr=sr, target_sr=16000)
+                                data = (np.clip(data, -1.0, 1.0) * 32767).astype(np.int16)
+                            pcm_data = data.tobytes()
+                            os.remove(path)
+                            for i in range(0, len(pcm_data), 4096):
+                                await websocket.send_json({
+                                    "type": "audio_chunk",
+                                    "audio": base64.b64encode(pcm_data[i:i+4096]).decode("utf-8")
+                                })
+                except Exception as e:
+                    logger.error(f"[WS Agent] TTS Error: {e}")
+
+            # Stream LLM
+            async for chunk in client.stream_chat(messages, temperature=0.7):
+                choices = chunk.get("choices") or []
+                if not choices:
+                    continue
+                delta = choices[0].get("delta", {}) or {}
+                content = delta.get("content")
+                if content:
+                    await websocket.send_json({"type": "llm_chunk", "text": content})
+                    full_assistant_response.append(content)
+                    sentence_buffer += content
+                    
+                    # Split sentences by punctuation
+                    m = re.search(r'[。？！；\n]|[.?!\n]', sentence_buffer)
+                    if m:
+                        split_idx = m.end()
+                        sentence = sentence_buffer[:split_idx].strip()
+                        sentence_buffer = sentence_buffer[split_idx:]
+                        if sentence:
+                            await send_status("speaking")
+                            await run_tts_and_stream(sentence)
+
+            # Synthesize remainder if any
+            remainder = sentence_buffer.strip()
+            if remainder:
+                await send_status("speaking")
+                await run_tts_and_stream(remainder)
+
+            # Finish Response
+            assistant_text = "".join(full_assistant_response)
+            if conversation_id:
+                db.add_message(str(uuid.uuid4()), conversation_id, "assistant", assistant_text)
+            messages.append({"role": "assistant", "content": assistant_text})
+            
+            await websocket.send_json({"type": "llm_end"})
+            await websocket.send_json({"type": "audio_end"})
+            await send_status("listening")
+            
+        except asyncio.CancelledError:
+            logger.info("[WS Agent] response generation cancelled")
+            raise
+        except Exception as e:
+            logger.error(f"[WS Agent] process_response error: {e}")
+            await websocket.send_json({"type": "error", "message": str(e)})
+            await send_status("listening")
+
+    # Main WebSocket receive loop
+    try:
+        await send_status("listening")
+        while True:
+            message = await websocket.receive()
+            
+            if "bytes" in message:
+                data = message["bytes"]
+                if not data:
+                    continue
+                
+                chunk_np = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
+                audio_buffer.append(chunk_np)
+                samples_since_last_vad += len(chunk_np)
+                
+                # Run VAD every 250ms (4000 samples)
+                if samples_since_last_vad >= 4000:
+                    samples_since_last_vad = 0
+                    current_audio = np.concatenate(audio_buffer)
+                    duration = len(current_audio) / 16000.0
+                    
+                    # Run Silero VAD
+                    segments = silero_vad_provider.segments(current_audio, sample_rate=16000)
+                    
+                    if not speaking:
+                        if len(segments) > 0:
+                            speaking = True
+                            await interrupt_response()
+                            await send_status("listening")
+                    else:
+                        if len(segments) > 0:
+                            last_end = segments[-1]["end"]
+                            silence_dur = duration - last_end
+                            if silence_dur >= silence_timeout:
+                                logger.info(f"[WS Agent] Voice End detected (silence: {silence_dur:.2f}s)")
+                                await send_status("recognizing")
+                                
+                                end_idx = int((last_end + 0.2) * 16000)
+                                speech_audio = current_audio[:end_idx]
+                                
+                                audio_buffer = []
+                                speaking = False
+                                
+                                # Run ASR
+                                asr_provider_name = speaker["asr_provider"].lower() if speaker else "sensevoice"
+                                text = ""
+                                try:
+                                    if "sensevoice" in asr_provider_name:
+                                        result = sensevoice_provider.transcribe(speech_audio)
+                                        text = result.get("text", "").strip()
+                                    elif "vosk" in asr_provider_name:
+                                        pcm_bytes = (np.clip(speech_audio, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
+                                        text = vosk_provider.transcribe(pcm_bytes)
+                                    elif "qwen" in asr_provider_name:
+                                        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                                            sf.write(tmp.name, speech_audio, 16000)
+                                            tmp_path = tmp.name
+                                        try:
+                                            text = qwen_asr_provider.transcribe(tmp_path)
+                                        finally:
+                                            if os.path.exists(tmp_path):
+                                                os.remove(tmp_path)
+                                except Exception as e:
+                                    logger.error(f"[WS Agent] ASR error: {e}")
+                                
+                                logger.info(f"[WS Agent] ASR text: {text}")
+                                if len(text) <= 1 or text in ["。", "？", "！", ".", "?", "!"]:
+                                    logger.info(f"[WS Agent] Ignored noise/short text: {text}")
+                                    await send_status("listening")
+                                else:
+                                    await websocket.send_json({"type": "asr_result", "text": text})
+                                    response_task = asyncio.create_task(process_response(text))
+                        else:
+                            if duration > 3.0:
+                                logger.info("[WS Agent] Resetting speaking state due to lack of VAD segments")
+                                speaking = False
+                                audio_buffer = []
+            
+            elif "text" in message:
+                try:
+                    import json
+                    cmd = json.loads(message["text"])
+                    if cmd.get("type") == "start":
+                        speaker_id = cmd.get("speaker_id", speaker_id)
+                        conversation_id = cmd.get("conversation_id", conversation_id)
+                        speaker = db.get_speaker(speaker_id) or speaker
+                        system_prompt = speaker["system_prompt"] if speaker else system_prompt
+                        messages = [{"role": "system", "content": system_prompt}]
+                        if conversation_id:
+                            db_msgs = db.list_messages(conversation_id)
+                            for m in db_msgs:
+                                messages.append({"role": m["role"], "content": m["content"]})
+                        logger.info(f"[WS Agent] Started session: speaker={speaker_id}, conversation={conversation_id}")
+                    elif cmd.get("type") == "interrupt":
+                        await interrupt_response()
+                except Exception as e:
+                    logger.error(f"[WS Agent] Failed to parse control text: {e}")
+                    
+    except WebSocketDisconnect:
+        logger.info("[WS Agent] Disconnected")
+    except Exception as e:
+        logger.error(f"[WS Agent] Websocket Loop Error: {e}")
+    finally:
+        if response_task and not response_task.done():
+            response_task.cancel()
+
 @router.post("/speech")
 async def speech(request_body: SpeechRequest, request: Request):
     request.state.model_name = request_body.model

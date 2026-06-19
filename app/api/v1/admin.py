@@ -126,8 +126,11 @@ async def list_tutorials():
                 chapter_title = "第 1 章：声学与语音 AI 原理基础"
             elif "hardware" in item:
                 chapter_title = "第 2 章：ESP32 硬件与 WebSocket 对接"
+            elif "practice" in item:
+                chapter_title = "第 3 章：AI 语音应用实战演练"
             else:
                 chapter_title = item.replace("_", " ").title()
+
 
             sections = []
             # 获取目录下的所有 .md 文件

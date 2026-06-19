@@ -416,7 +416,8 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
   }, []);
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-6 overflow-hidden select-none">
+    <div className="flex flex-1 min-h-0 gap-6 overflow-hidden select-none">
+
       
       {/* 左侧：发音人呼叫主控制区 */}
       <div className="flex-1 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl p-6 flex flex-col justify-between relative shadow-sm">
@@ -612,7 +613,8 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
         </div>
 
         {/* 对话消息滚动体 */}
-        <div className="flex-1 overflow-y-auto my-4 space-y-4 pr-1 custom-scrollbar max-h-[calc(100vh-18rem)]">
+        <div className="flex-1 overflow-y-auto my-4 space-y-4 -mr-5 pr-5 custom-scrollbar max-h-[calc(100vh-18rem)]">
+
           {messages.length === 0 ? (
             <div className="h-full flex items-center justify-center text-center text-xs text-[var(--muted-text)] py-20">
               暂无语音交互对话记录
