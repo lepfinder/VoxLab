@@ -8,12 +8,19 @@ from config import MODELS, HF_HOME
 class VoskProvider(BaseProvider):
     def __init__(self):
         self.model_name = MODELS["vosk"]
-        # 兼容逻辑：优先找 HF 缓存，再找本地 models 目录
+        # 兼容逻辑：优先找本地自定义 models/vosk-model 目录，再找标准的 local 路径与 HF 缓存
         self.model_path = os.path.join(HF_HOME, "hub", self.model_name)
-        if not os.path.exists(self.model_path):
-            local_alt = os.path.join("models", self.model_name)
-            if os.path.exists(local_alt):
-                self.model_path = local_alt
+        
+        # 依次检查本地候选路径
+        local_candidates = [
+            os.path.join("models", "vosk-model"),
+            os.path.join("models", self.model_name)
+        ]
+        for candidate in local_candidates:
+            if os.path.exists(candidate):
+                self.model_path = candidate
+                break
+
 
     def load(self):
         if not os.path.exists(self.model_path):

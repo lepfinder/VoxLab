@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Play, Pause, Sliders, Activity, FileAudio, VolumeX, AlertCircle, Headphones, Mic, Square } from 'lucide-react';
+import { Upload, Play, Pause, Sliders, Activity, FileAudio, VolumeX, AlertCircle, Headphones, Mic, Square, Download } from 'lucide-react';
+
 
 export default function VadPage({ selectedKey }: { selectedKey: string }) {
   const [file, setFile] = useState<File | null>(null);
@@ -496,20 +497,44 @@ export default function VadPage({ selectedKey }: { selectedKey: string }) {
                   </div>
                 </div>
 
-                {/* 智能播放设定 */}
-                {segments.length > 0 && (
+                {/* 播放辅助控制 */}
+                <div className="flex items-center gap-2">
+                  {/* 保存/下载音频按钮 */}
                   <button
-                    onClick={() => setMuteSilence(!muteSilence)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
-                      muteSilence
-                        ? 'bg-red-500/10 border-red-500/30 text-red-500'
-                        : 'border-[var(--card-border)] text-[var(--muted-text)] hover:bg-[var(--card-border)]/5'
-                    }`}
+                    onClick={() => {
+                      if (!file) return;
+                      const url = URL.createObjectURL(file);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = file.name;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--card-border)] text-[var(--muted-text)] hover:bg-[var(--card-border)]/10 hover:text-[var(--foreground)] transition-all"
+                    title="将当前音频保存下载到您的电脑本地"
                   >
-                    <VolumeX size={14} />
-                    {muteSilence ? '已开启一键静音消除' : '一键消除无声区间'}
+                    <Download size={14} />
+                    保存音频
                   </button>
-                )}
+
+                  {/* 智能播放设定 */}
+                  {segments.length > 0 && (
+                    <button
+                      onClick={() => setMuteSilence(!muteSilence)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                        muteSilence
+                          ? 'bg-red-500/10 border-red-500/30 text-red-500'
+                          : 'border-[var(--card-border)] text-[var(--muted-text)] hover:bg-[var(--card-border)]/5'
+                      }`}
+                    >
+                      <VolumeX size={14} />
+                      {muteSilence ? '已开启一键静音消除' : '一键消除无声区间'}
+                    </button>
+                  )}
+                </div>
+
               </div>
             )}
           </div>

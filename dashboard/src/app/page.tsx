@@ -157,9 +157,9 @@ export default function AdminDashboard() {
 
         {/* 主内容区 */}
         <main className={`flex-1 p-8 custom-scrollbar ${
-          activeTab === 'conversation' ? 'h-full overflow-hidden pb-8' : 'overflow-y-auto pb-24'
+          activeTab === 'conversation' || activeTab === 'vad' ? 'h-full overflow-hidden pb-8' : 'overflow-y-auto pb-24'
         }`}>
-          <div className={`${activeTab === 'conversation' ? 'h-full' : ''} max-w-6xl mx-auto`}>
+          <div className={`${activeTab === 'conversation' || activeTab === 'vad' ? 'h-full' : ''} max-w-6xl mx-auto`}>
             {/* 页面标题 - 仅在非模型/非配置页显示 */}
             {!activeTab.startsWith('asr-')
               && !activeTab.startsWith('tts-')
@@ -182,12 +182,13 @@ export default function AdminDashboard() {
             {/* 页面内容 */}
             {renderContent()}
 
-            {/* 底部占位 - 仅在非通话间渲染 */}
-            {activeTab !== 'conversation' && <div className="h-40 w-full" />}
+            {/* 底部占位 - 仅在非通话/VAD页渲染 */}
+            {activeTab !== 'conversation' && activeTab !== 'vad' && <div className="h-40 w-full" />}
           </div>
         </main>
       </div>
     </div>
+
 
   );
 }

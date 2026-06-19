@@ -24,12 +24,81 @@ export default function TestPanel({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [text, setText] = useState('');
 
+  // 自定义录音播放器状态
+  const recordedAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlayingRecorded, setIsPlayingRecorded] = useState(false);
+  const [recordedCurrentTime, setRecordedCurrentTime] = useState(0);
+  const [recordedDuration, setRecordedDuration] = useState(0);
+  const [recordedAudioUrl, setRecordedAudioUrl] = useState<string>('');
+
   // Recording state
   const [asrMode, setAsrMode] = useState<'upload' | 'record'>('upload');
   const [isRecording, setIsRecording] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [recordedBlob, setRecordedBlob] = useState<File | null>(null);
+  
+  // 监听录音文件改变，自动生成对应的本地播放链接，并自动销毁旧的 url
+  useEffect(() => {
+    if (recordedBlob) {
+      const url = URL.createObjectURL(recordedBlob);
+      setRecordedAudioUrl(url);
+      setIsPlayingRecorded(false);
+      setRecordedCurrentTime(0);
+      setRecordedDuration(0);
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    } else {
+      setRecordedAudioUrl('');
+    }
+  }, [recordedBlob]);
+
+  const togglePlayRecorded = () => {
+    const audio = recordedAudioRef.current;
+    if (!audio) return;
+    if (isPlayingRecorded) {
+      audio.pause();
+      setIsPlayingRecorded(false);
+    } else {
+      audio.play().then(() => {
+        setIsPlayingRecorded(true);
+      }).catch(() => {});
+    }
+  };
+
+  const handleRecordedTimeUpdate = () => {
+    if (recordedAudioRef.current) {
+      setRecordedCurrentTime(recordedAudioRef.current.currentTime);
+    }
+  };
+
+  const handleRecordedMetadata = () => {
+    if (recordedAudioRef.current) {
+      setRecordedDuration(recordedAudioRef.current.duration || 0);
+    }
+  };
+
+  const seekRecordedAudio = (e: React.MouseEvent<HTMLDivElement>) => {
+    const audio = recordedAudioRef.current;
+    if (!audio || !recordedDuration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const width = rect.width;
+    const percentage = clickX / width;
+    const newTime = percentage * recordedDuration;
+    audio.currentTime = newTime;
+    setRecordedCurrentTime(newTime);
+  };
+
+  const formatTime = (seconds: number) => {
+    if (isNaN(seconds) || seconds === Infinity) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+
   const streamRef = useRef<MediaStream | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number>(0);
@@ -202,15 +271,57 @@ export default function TestPanel({
             )}
 
             {recordedBlob && !isRecording && (
-              <div>
-                <FileAudio size={48} className="mx-auto mb-4 text-green-500" />
-                <p className="text-sm font-medium mb-1">录音完成</p>
-                <p className="text-xs text-[var(--muted-text)]">
-                  {(recordedBlob.size / 1024).toFixed(1)} KB
-                </p>
-                <audio src={URL.createObjectURL(recordedBlob)} controls className="w-64 h-8 mt-3" />
+              <div className="flex flex-col items-center">
+                {/* 隐藏的 audio 元素用于辅助逻辑控制 */}
+                <audio
+                  ref={recordedAudioRef}
+                  src={recordedAudioUrl}
+                  onTimeUpdate={handleRecordedTimeUpdate}
+                  onLoadedMetadata={handleRecordedMetadata}
+                  onEnded={() => setIsPlayingRecorded(false)}
+                  className="hidden"
+                />
+
+                <div className="w-16 h-16 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center mb-3 text-green-500 shadow-lg shadow-green-500/5 animate-pulse">
+                  <FileAudio size={28} />
+                </div>
+                <p className="text-sm font-semibold mb-1">录音已就绪</p>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-[10px] bg-green-500/10 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full font-bold">16kHz Mono</span>
+                  <span className="text-[10px] text-[var(--muted-text)] font-mono">{(recordedBlob.size / 1024).toFixed(1)} KB</span>
+                </div>
+
+                {/* 精美拟真自定义播放器 */}
+                <div className="w-72 bg-[var(--background)] border border-[var(--card-border)] rounded-2xl p-3.5 flex items-center gap-3.5 shadow-md">
+                  <button
+                    type="button"
+                    onClick={togglePlayRecorded}
+                    className="w-10 h-10 shrink-0 bg-blue-600 hover:bg-blue-500 text-white rounded-full flex items-center justify-center hover:scale-105 transition-all shadow-md shadow-blue-500/10 active:scale-95"
+                  >
+                    {isPlayingRecorded ? <Pause size={16} /> : <Play size={16} className="translate-x-[1px]" />}
+                  </button>
+                  
+                  <div className="flex-1 space-y-1.5">
+                    {/* 进度轨道 */}
+                    <div 
+                      onClick={seekRecordedAudio}
+                      className="w-full h-1.5 bg-[var(--card-border)] rounded-full overflow-hidden cursor-pointer relative"
+                    >
+                      <div 
+                        className="h-full bg-blue-600 transition-[width] duration-75"
+                        style={{ width: `${(recordedCurrentTime / (recordedDuration || 1)) * 100}%` }}
+                      />
+                    </div>
+                    {/* 播放时间 */}
+                    <div className="flex justify-between text-[10px] text-[var(--muted-text)] font-mono">
+                      <span>{formatTime(recordedCurrentTime)}</span>
+                      <span>{formatTime(recordedDuration)}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
+
 
             <button
               onClick={isRecording ? stopRecording : startRecording}

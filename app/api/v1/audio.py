@@ -336,14 +336,28 @@ async def voice_activity_detection(
     import time
     start_time = time.time()
     try:
-        suffix = os.path.splitext(file.filename)[1] if file.filename else ".webm"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        # 在本地创建永久音频库
+        save_dir = "temp_audio"
+        os.makedirs(save_dir, exist_ok=True)
+        
+        # 统一使用原始名字或带时间戳的 wav 格式
+        orig_ext = os.path.splitext(file.filename)[1] if file.filename else ".webm"
+        filename = f"vad_{int(time.time())}_{uuid.uuid4().hex[:8]}{orig_ext}"
+        temp_path = os.path.join(save_dir, filename)
+
+        with open(temp_path, "wb") as f:
             content = await file.read()
-            tmp.write(content)
-            temp_path = tmp.name
+            f.write(content)
 
         import librosa
         data, sr = librosa.load(temp_path, sr=16000)
+
+        # 如果原本不是 wav，转换为标准 wav 方便用户在本地播放和调试
+        if orig_ext.lower() != ".wav":
+            wav_path = os.path.splitext(temp_path)[0] + ".wav"
+            import soundfile as sf
+            sf.write(wav_path, data, 16000)
+            logger.info(f"[VAD] Transcoded source file to wav: {wav_path}")
 
         engine_key = engine.lower()
         if "energy" in engine_key:
@@ -369,6 +383,6 @@ async def voice_activity_detection(
         logger.error(f"[VAD] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        if temp_path and os.path.exists(temp_path):
-            try: os.remove(temp_path)
-            except: pass
+        # 为了保留本地文件，此处仅在出错且文件确实生成时尝试清理，平时正常请求时选择保留文件在 temp_audio 中
+        pass
+
