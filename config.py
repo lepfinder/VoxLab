@@ -16,6 +16,7 @@ MODELS = {
     "kokoro": "hexgrad/Kokoro-82M",
     "qwen_tts_design": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit" if IS_MACOS else "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
     "qwen_tts_custom": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit" if IS_MACOS else "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+    "qwen_tts_base": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit" if IS_MACOS else "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
     "omni_voice": "k2-fsa/OmniVoice",
     "vox_cpm": "openbmb/VoxCPM2",
 

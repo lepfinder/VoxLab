@@ -425,6 +425,22 @@ async def speech(request_body: SpeechRequest, request: Request):
     model_key = request_body.model.lower()
     output_path = None
     audio_bytes = None
+    temp_ref_path = None
+
+    if request_body.ref_audio:
+        import base64
+        import tempfile
+        ref_data = request_body.ref_audio
+        if "," in ref_data:
+            ref_data = ref_data.split(",", 1)[1]
+        try:
+            decoded_bytes = base64.b64decode(ref_data)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                tmp.write(decoded_bytes)
+                temp_ref_path = tmp.name
+            logger.info(f"[TTS] Decoded base64 ref_audio, saved to temporary path: {temp_ref_path}")
+        except Exception as e:
+            logger.error(f"[TTS] Failed to decode base64 ref_audio: {e}")
 
     logger.info(f"[TTS] Model: {request_body.model}, Format: {request_body.response_format}, Text: {request_body.input[:50]}...")
 
@@ -464,8 +480,19 @@ async def speech(request_body: SpeechRequest, request: Request):
 
                 # 数据获取与实时编码
                 if "qwen" in model_key:
-                    provider = QwenTTSProvider(mode="custom" if request_body.voice and request_body.voice != "None" else "design")
-                    for chunk in provider.stream_generate(request_body.input, voice=request_body.voice):
+                    mode = "design"
+                    if temp_ref_path:
+                        mode = "clone"
+                    elif request_body.voice and request_body.voice != "None":
+                        mode = "custom"
+                    provider = QwenTTSProvider(mode=mode)
+                    for chunk in provider.stream_generate(
+                        request_body.input, 
+                        voice=request_body.voice, 
+                        instruct=request_body.instruct,
+                        ref_audio=temp_ref_path,
+                        ref_text=request_body.ref_text
+                    ):
                         async for opus_packet in process_pcm_chunk(chunk):
                             yield opus_packet
                 elif "edge" in model_key:
@@ -541,10 +568,19 @@ async def speech(request_body: SpeechRequest, request: Request):
             sf.write(output_path, audio_np, 24000)
         
         elif "qwen" in model_key:
-            p = QwenTTSProvider(mode="custom" if request_body.voice != "None" else "design")
+            mode = "design"
+            if temp_ref_path:
+                mode = "clone"
+            elif request_body.voice and request_body.voice != "None":
+                mode = "custom"
+            p = QwenTTSProvider(mode=mode)
             if request_body.response_format == "pcm":
-                return StreamingResponse(p.stream_generate(request_body.input, voice=request_body.voice), media_type="audio/pcm", headers={"X-Model-Name": request_body.model})
-            output_path = p.generate(request_body.input, voice=request_body.voice)
+                return StreamingResponse(
+                    p.stream_generate(request_body.input, voice=request_body.voice, instruct=request_body.instruct, ref_audio=temp_ref_path, ref_text=request_body.ref_text), 
+                    media_type="audio/pcm", 
+                    headers={"X-Model-Name": request_body.model}
+                )
+            output_path = p.generate(request_body.input, voice=request_body.voice, instruct=request_body.instruct, ref_audio=temp_ref_path, ref_text=request_body.ref_text)
 
         elif "omni" in model_key: output_path = omni_provider.generate(request_body.input)
         elif "vox" in model_key: output_path = voxcpm_provider.generate(request_body.input)
@@ -557,6 +593,12 @@ async def speech(request_body: SpeechRequest, request: Request):
     except Exception as e:
         logger.error(f"[TTS] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if temp_ref_path and os.path.exists(temp_ref_path):
+            try:
+                os.remove(temp_ref_path)
+            except:
+                pass
 
 from pydantic import BaseModel
 

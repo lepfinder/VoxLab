@@ -22,7 +22,24 @@ export default function QwenTTSPage({ selectedKey }: QwenTTSPageProps) {
   const [mode, setMode] = useState('design');
   const [voice, setVoice] = useState('serena');
   const [instruct, setInstruct] = useState('A clear and natural speech.');
-  const [text, setText] = useState('你好，欢迎使用 VoxLab 语音合成服务。今天天气真不错，适合出去走走。');
+  const [text, setText] = useState('好了各位，往后退，往后退！我有个天大的好消息要宣布：Qwen-TTS正式开源啦！');
+  
+  // Clone states
+  const [refText, setRefText] = useState('');
+  const [refAudioBase64, setRefAudioBase64] = useState<string | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setRefAudioBase64(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setRefAudioBase64(null);
+    }
+  };
 
   const handleTest = async () => {
     if (!text.trim() || !selectedKey) return;
@@ -35,8 +52,19 @@ export default function QwenTTSPage({ selectedKey }: QwenTTSPageProps) {
       const body: any = {
         model: 'qwen',
         input: text,
-        voice: mode === 'custom' ? voice : 'None'
+        voice: mode === 'custom' ? voice : 'None',
+        instruct: instruct
       };
+
+      if (mode === 'clone') {
+        if (!refAudioBase64) {
+          alert('请上传声音克隆的参考音频文件');
+          setIsLoading(false);
+          return;
+        }
+        body.ref_audio = refAudioBase64;
+        body.ref_text = refText;
+      }
 
       const res = await fetch('/api/v1/audio/speech', {
         method: 'POST',
@@ -58,13 +86,25 @@ export default function QwenTTSPage({ selectedKey }: QwenTTSPageProps) {
     }
   };
 
-  const curlCode = `curl http://localhost:8001/api/v1/audio/speech \\
+  const curlCode = mode === 'clone' 
+    ? `curl http://localhost:8001/api/v1/audio/speech \\
   -H "Authorization: Bearer ${selectedKey || 'YOUR_TOKEN'}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "qwen",
     "input": "${text || '你好，这是 Qwen TTS 测试'}",
-    "voice": "${mode === 'custom' ? voice : 'None'}"
+    "voice": "None",
+    "ref_audio": "data:audio/wav;base64,UklGR...",
+    "ref_text": "${refText}"
+  }' --output output.wav`
+    : `curl http://localhost:8001/api/v1/audio/speech \\
+  -H "Authorization: Bearer ${selectedKey || 'YOUR_TOKEN'}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "qwen",
+    "input": "${text || '你好，这是 Qwen TTS 测试'}",
+    "voice": "${mode === 'custom' ? voice : 'None'}",
+    "instruct": "${instruct}"
   }' --output output.wav`;
 
   return (
@@ -122,6 +162,34 @@ export default function QwenTTSPage({ selectedKey }: QwenTTSPageProps) {
                   {v}
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {mode === 'clone' && (
+          <div className="space-y-4 mb-4">
+            <div>
+              <label className="text-xs font-bold text-[var(--muted-text)] uppercase tracking-wider mb-2 block">
+                参考音频文件 (WAV/MP3) *
+              </label>
+              <input
+                type="file"
+                accept="audio/*"
+                onChange={handleFileChange}
+                className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2 text-sm focus:outline-none text-[var(--foreground)]"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-[var(--muted-text)] uppercase tracking-wider mb-2 block">
+                参考音频文本 (Ref Text)
+              </label>
+              <input
+                type="text"
+                value={refText}
+                onChange={(e) => setRefText(e.target.value)}
+                placeholder="（选填）参考音频里说话的具体文字内容，这有助于提高克隆的声学稳定性"
+                className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-[var(--foreground)]"
+              />
             </div>
           </div>
         )}

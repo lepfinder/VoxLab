@@ -17,3 +17,6 @@ class SpeechRequest(BaseModel):
     voice: str = "alloy"
     response_format: Optional[str] = "mp3"
     speed: Optional[float] = 1.0
+    instruct: Optional[str] = None
+    ref_audio: Optional[str] = None
+    ref_text: Optional[str] = None

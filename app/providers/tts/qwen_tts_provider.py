@@ -24,9 +24,14 @@ def get_torch_device():
 
 class QwenTTSProvider(BaseProvider):
     def __init__(self, mode: str = "design"):
-        # mode: "design" (1.7B-VoiceDesign) or "custom" (1.7B-CustomVoice)
+        # mode: "design" (1.7B-VoiceDesign), "custom" (1.7B-CustomVoice), or "clone" (1.7B-Base)
         self.mode = mode
-        self.model_id = MODELS["qwen_tts_custom"] if mode == "custom" else MODELS["qwen_tts_design"]
+        if mode == "custom":
+            self.model_id = MODELS["qwen_tts_custom"]
+        elif mode == "clone":
+            self.model_id = MODELS["qwen_tts_base"]
+        else:
+            self.model_id = MODELS["qwen_tts_design"]
         self.is_macos = IS_MACOS
 
     def load(self):
