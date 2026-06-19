@@ -39,7 +39,7 @@ export default function AdminDashboard() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const API_BASE = '/v1/admin';
+  const API_BASE = '/admin';
 
   // 获取数据
   const fetchData = async () => {

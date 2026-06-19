@@ -103,7 +103,7 @@ export default function LLMConfigPage({ embedded = false }: LLMConfigPageProps) 
 
   const fetchConfigs = async () => {
     try {
-      const res = await fetch('/v1/llm/configs');
+      const res = await fetch('/admin/llm/configs');
       const data = await res.json();
       setConfigs(data);
     } catch (e) {
@@ -130,7 +130,7 @@ export default function LLMConfigPage({ embedded = false }: LLMConfigPageProps) 
     setError(null);
     setSuccess(null);
     try {
-      const res = await fetch('/v1/llm/configs', {
+      const res = await fetch('/admin/llm/configs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -160,7 +160,7 @@ export default function LLMConfigPage({ embedded = false }: LLMConfigPageProps) 
 
   const handleDelete = async (id: string) => {
     if (!confirm('确认删除该 LLM 配置？')) return;
-    await fetch(`/v1/llm/configs/${id}`, { method: 'DELETE' });
+    await fetch(`/admin/llm/configs/${id}`, { method: 'DELETE' });
     fetchConfigs();
   };
 
@@ -171,7 +171,7 @@ export default function LLMConfigPage({ embedded = false }: LLMConfigPageProps) 
     if (!cfg) return;
     setError(null);
     try {
-      const res = await fetch('/v1/llm/configs', {
+      const res = await fetch('/admin/llm/configs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

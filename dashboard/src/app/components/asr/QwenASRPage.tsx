@@ -24,7 +24,7 @@ export default function QwenASRPage({ selectedKey }: QwenASRPageProps) {
     formData.append('model', 'qwen');
 
     try {
-      const res = await fetch('/v1/audio/transcriptions', {
+      const res = await fetch('/api/v1/audio/transcriptions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${selectedKey}` },
         body: formData
@@ -38,7 +38,7 @@ export default function QwenASRPage({ selectedKey }: QwenASRPageProps) {
     }
   };
 
-  const curlCode = `curl http://localhost:8001/v1/audio/transcriptions \\
+  const curlCode = `curl http://localhost:8001/api/v1/audio/transcriptions \\
   -H "Authorization: Bearer ${selectedKey || 'YOUR_TOKEN'}" \\
   -F "file=@/path/to/audio.wav" \\
   -F "model=qwen"`;

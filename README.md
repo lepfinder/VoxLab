@@ -1,6 +1,6 @@
-# HomeCore AI Server
+# VoxLab
 
-一个为本地推理优化的、生产级别的 AI 模型管理与分发平台。基于 FastAPI 和 Next.js 构建，旨在为 macOS (Apple Silicon) 用户提供极致的本地 AI 体验。
+一个专注于本地语音技术研究与测试的语音实验室平台。基于 FastAPI 和 Next.js 构建，接入多个本地可运行的 ASR（语音识别）和 TTS（文字转语音）服务，提供演练场测试和相关接口文档，并对外提供标准的 API 服务。
 
 ## 🌟 核心特性
 
@@ -30,8 +30,8 @@
 ### 1. 准备环境
 ```bash
 # 创建并激活 Conda 环境
-conda create -n homecore-ai python=3.11
-conda activate homecore-ai
+conda create -n voxlab python=3.11
+conda activate voxlab
 
 # 安装 Python 依赖
 pip install -r requirements.txt

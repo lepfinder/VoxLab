@@ -3,7 +3,7 @@ import tempfile
 import logging
 from fastapi import APIRouter, UploadFile, File, HTTPException
 
-router = APIRouter(prefix="/voiceprint")
+router = APIRouter(prefix="/api/v1/voiceprint")
 logger = logging.getLogger(__name__)
 
 # 直接使用已有的 VoiceprintProvider，它使用 ModelScope ERes2NetV2 模型

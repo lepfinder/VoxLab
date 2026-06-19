@@ -10,7 +10,7 @@ from app.core.database import db
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1", tags=["conversations"])
+router = APIRouter(prefix="/admin", tags=["conversations"])
 
 
 # ---------------- Conversation ----------------

@@ -1,4 +1,4 @@
-"""OpenAI 兼容的 /v1/chat/completions 路由。
+"""OpenAI 兼容的 /api/v1/chat/completions 路由。
 将请求转发到数据库里配置的 LLM 供应商（默认 DeepSeek）。
 """
 import json
@@ -16,7 +16,7 @@ from app.providers.llm.openai_compat import OpenAICompatClient
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1", tags=["chat"])
+router = APIRouter(prefix="/api/v1", tags=["chat"])
 
 
 class ChatMessage(BaseModel):
@@ -110,7 +110,7 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
                         if request.headers.get("authorization", "").startswith("Bearer ")
                         else "",
                         client.model,
-                        "/v1/chat/completions",
+                        "/api/v1/chat/completions",
                         200,
                         0,
                         0,

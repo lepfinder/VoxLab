@@ -31,7 +31,7 @@ export default function EdgePage({ selectedKey }: EdgePageProps) {
     setAudioUrl(null);
 
     try {
-      const res = await fetch('/v1/audio/speech', {
+      const res = await fetch('/api/v1/audio/speech', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -55,7 +55,7 @@ export default function EdgePage({ selectedKey }: EdgePageProps) {
     }
   };
 
-  const curlCode = `curl http://localhost:8001/v1/audio/speech \\
+  const curlCode = `curl http://localhost:8001/api/v1/audio/speech \\
   -H "Authorization: Bearer ${selectedKey || 'YOUR_TOKEN'}" \\
   -H "Content-Type: application/json" \\
   -d '{

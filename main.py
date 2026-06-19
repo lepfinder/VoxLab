@@ -57,9 +57,9 @@ app.add_middleware(
 async def auth_and_log_middleware(request: Request, call_next):
     path = request.url.path
     
-    # 仅拦截 /v1/ 下非 admin 的接口
+    # 仅记录对外 API 接口；内部 /admin/* 管理类不进日志
     start_time = time.time()
-    if not path.startswith("/v1/") or path.startswith("/v1/admin"):
+    if not path.startswith("/api/") or path.startswith("/admin"):
         return await call_next(request)
 
     auth_header = request.headers.get("Authorization", "")
@@ -125,9 +125,9 @@ if DEV_MODE:
     
     @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
     async def proxy_frontend(path: str, request: Request):
-        # 只有当路径不以 v1/ 开头时才代理到前端开发服务器
-        # 以 v1/ 开头的路径如果走到这里，说明之前的 API 路由都没匹配上
-        if path.startswith("v1/"):
+        # 只有当路径不以 api/ 或 admin/ 开头时才代理到前端开发服务器
+        # 这些路径如果走到这里，说明之前的 API 路由都没匹配上
+        if path.startswith("api/") or path.startswith("admin/"):
             return JSONResponse(status_code=404, content={"detail": f"API Route //{path} not found in this instance"})
             
         url = f"/{path}"

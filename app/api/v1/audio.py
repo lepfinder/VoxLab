@@ -68,7 +68,7 @@ class VoiceStreamHandler:
             logger.error(f"VoiceStream Error: {e}")
             return None
 
-router = APIRouter(prefix="/v1/audio")
+router = APIRouter(prefix="/api/v1/audio")
 logger = logging.getLogger(__name__)
 
 # 实例化提供者

@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "HomeCore AI Dashboard",
-  description: "Enterprise local AI platform management",
+  title: "VoxLab Dashboard",
+  description: "Local speech laboratory platform management",
 };
 
 export default function RootLayout({ children }) {

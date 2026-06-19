@@ -23,7 +23,7 @@ export default function MarkdownRenderer({ model, filename = 'index.md' }: Markd
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(`/v1/admin/docs/${model}/${filename}`)
+    fetch(`/admin/docs/${model}/${filename}`)
       .then(res => {
         if (!res.ok) throw new Error('文档未找到');
         return res.text();

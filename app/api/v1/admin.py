@@ -5,7 +5,7 @@ from fastapi.responses import PlainTextResponse
 from app.core.database import db
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/v1/admin")
+router = APIRouter(prefix="/admin")
 
 # 模型文档目录
 DOCS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "docs", "models")

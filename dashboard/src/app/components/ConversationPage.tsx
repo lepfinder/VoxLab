@@ -57,7 +57,7 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
   // --- 检查 LLM 配置 ---
   const checkLlmReady = useCallback(async () => {
     try {
-      const res = await fetch('/v1/llm/configs/default');
+      const res = await fetch('/admin/llm/configs/default');
       const data = await res.json();
       setLlmReady(!!data?.id);
     } catch {
@@ -73,13 +73,13 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('/v1/conversations');
+        const res = await fetch('/admin/conversations');
         const data = await res.json();
         if (data.length > 0) {
           setActiveId(data[0].id);
           return;
         }
-        const create = await fetch('/v1/conversations', {
+        const create = await fetch('/admin/conversations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ title: '实时对话' }),
@@ -97,7 +97,7 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
     if (!activeId) return;
     (async () => {
       try {
-        const res = await fetch(`/v1/conversations/${activeId}`);
+        const res = await fetch(`/admin/conversations/${activeId}`);
         const data = await res.json();
         setMessages(data.messages || []);
       } catch {
@@ -128,7 +128,7 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
     abortRef.current = controller;
 
     try {
-      const res = await fetch('/v1/chat/completions', {
+      const res = await fetch('/api/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -194,7 +194,7 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
     if (!text.trim()) return;
     setPhase('speaking');
     try {
-      const res = await fetch('/v1/audio/speech', {
+      const res = await fetch('/api/v1/audio/speech', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -242,7 +242,7 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
     if (reply) await speak(reply);
     // 刷新最新消息列表（持久化的）
     if (activeId) {
-      const res = await fetch(`/v1/conversations/${activeId}`);
+      const res = await fetch(`/admin/conversations/${activeId}`);
       const data = await res.json();
       setMessages(data.messages || []);
     }
@@ -277,7 +277,7 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
       const form = new FormData();
       form.append('file', blob, 'utterance.webm');
       form.append('model', 'sensevoice');
-      const res = await fetch('/v1/audio/transcriptions', {
+      const res = await fetch('/api/v1/audio/transcriptions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${selectedKey}` },
         body: form,
