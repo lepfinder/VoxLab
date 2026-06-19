@@ -125,9 +125,9 @@ if DEV_MODE:
     
     @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
     async def proxy_frontend(path: str, request: Request):
-        # 只有当路径不以 api/ 或 admin/ 开头时才代理到前端开发服务器
+        # 只有当路径不以 api/、admin/ 或 v1/ 开头时才代理到前端开发服务器
         # 这些路径如果走到这里，说明之前的 API 路由都没匹配上
-        if path.startswith("api/") or path.startswith("admin/"):
+        if path.startswith("api/") or path.startswith("admin/") or path.startswith("v1/"):
             return JSONResponse(status_code=404, content={"detail": f"API Route //{path} not found in this instance"})
             
         url = f"/{path}"
