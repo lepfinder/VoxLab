@@ -12,6 +12,8 @@ interface ModelLayoutProps {
   framework?: string;
   useCases?: string[];
   githubUrl?: string;
+  docUrl?: string;
+  blogUrl?: string;
   model: string; // docs folder name
   children: React.ReactNode; // test tab content
 }
@@ -29,6 +31,8 @@ export default function ModelLayout({
   framework,
   useCases,
   githubUrl,
+  docUrl,
+  blogUrl,
   model,
   children,
 }: ModelLayoutProps) {
@@ -112,6 +116,46 @@ export default function ModelLayout({
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* 官方文档 */}
+          {docUrl && (
+            <div className="mb-3">
+              <label className="text-[10px] font-bold text-[var(--muted-text)] uppercase tracking-wider mb-1 block">
+                官方文档
+              </label>
+              <a
+                href={docUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline break-all"
+              >
+                <span>Read the Docs</span>
+                <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            </div>
+          )}
+
+          {/* 官方博客 */}
+          {blogUrl && (
+            <div className="mb-3">
+              <label className="text-[10px] font-bold text-[var(--muted-text)] uppercase tracking-wider mb-1 block">
+                官方博客
+              </label>
+              <a
+                href={blogUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline break-all"
+              >
+                <span>View Blog</span>
+                <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
             </div>
           )}
 

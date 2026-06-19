@@ -116,6 +116,7 @@ export default function QwenTTSPage({ selectedKey }: QwenTTSPageProps) {
       framework="MLX (macOS) / PyTorch (Linux)"
       useCases={['个性化语音', '音色克隆', '多风格合成', '有声书']}
       githubUrl="https://github.com/QwenLM/Qwen3-TTS"
+      blogUrl="https://qwen.ai/blog?id=qwen3tts-0115"
       model="qwen-tts"
     >
       {/* 模式选择 */}
