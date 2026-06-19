@@ -67,6 +67,18 @@ async def list_logs(limit: int = 100):
     return db.get_usage_logs(limit)
 
 
+# API 文档目录
+API_DOCS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "docs", "API_DOCUMENTATION.md")
+
+@router.get("/api-docs")
+async def get_api_docs():
+    """获取系统对外 API 接口文档（Markdown 格式）"""
+    if not os.path.isfile(API_DOCS_PATH):
+        raise HTTPException(status_code=404, detail="API documentation not found")
+    with open(API_DOCS_PATH, 'r', encoding='utf-8') as f:
+        return PlainTextResponse(content=f.read(), media_type="text/markdown; charset=utf-8")
+
+
 # --- 模型文档接口 ---
 @router.get("/docs")
 async def list_model_docs():

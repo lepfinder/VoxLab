@@ -13,17 +13,20 @@ import QwenTTSPage from './components/tts/QwenTTSPage';
 import VoxCPMPage from './components/tts/VoxCPMPage';
 import OmniPage from './components/tts/OmniPage';
 import EdgePage from './components/tts/EdgePage';
-import ConversationPage from './components/ConversationPage';
 import SystemConfigPage from './components/SystemConfigPage';
+import SpeakersPage from './components/SpeakersPage';
 import VadPage from './components/vad/VadPage';
 import TutorialsPage from './components/tutorials/TutorialsPage';
+import ApiDocsPage from './components/ApiDocsPage';
 
 // 页面标题映射
 const PAGE_TITLES: Record<string, string> = {
   overview: '系统概览',
-  conversation: '实时对话',
+  conversation: '智能通话间',
+  speakers: '发音人管理',
   vad: 'VAD 语音检测',
   tutorials: '实战与原理教程',
+  'api-docs': 'API 接口文档',
   'asr-sensevoice': 'SenseVoice',
   'asr-qwen': 'Qwen ASR',
   'asr-vosk': 'Vosk',
@@ -33,6 +36,7 @@ const PAGE_TITLES: Record<string, string> = {
   'tts-omni': 'OmniVoice',
   'tts-edge': 'Edge TTS',
 };
+
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -99,8 +103,16 @@ export default function AdminDashboard() {
         return <VadPage selectedKey={selectedKey} />;
       case 'tutorials':
         return <TutorialsPage />;
+      case 'api-docs':
+        return <ApiDocsPage />;
+      case 'speakers':
+        return <SpeakersPage />;
       case 'conversation':
-        return <ConversationPage selectedKey={selectedKey} onJumpToConfig={() => setActiveTab('system-config')} />;
+        {
+          const ConversationPage = require('./components/ConversationPage').default;
+          return <ConversationPage selectedKey={selectedKey} onJumpToConfig={() => setActiveTab('system-config')} />;
+        }
+
       case 'system-config':
         return (
           <SystemConfigPage
@@ -144,14 +156,18 @@ export default function AdminDashboard() {
         />
 
         {/* 主内容区 */}
-        <main className="flex-1 overflow-y-auto p-8 pb-24 custom-scrollbar">
-          <div className="max-w-6xl mx-auto">
+        <main className={`flex-1 p-8 custom-scrollbar ${
+          activeTab === 'conversation' ? 'h-full overflow-hidden pb-8' : 'overflow-y-auto pb-24'
+        }`}>
+          <div className={`${activeTab === 'conversation' ? 'h-full' : ''} max-w-6xl mx-auto`}>
             {/* 页面标题 - 仅在非模型/非配置页显示 */}
             {!activeTab.startsWith('asr-')
               && !activeTab.startsWith('tts-')
               && activeTab !== 'system-config'
               && activeTab !== 'vad'
-              && activeTab !== 'tutorials' && (
+              && activeTab !== 'tutorials'
+              && activeTab !== 'speakers'
+              && activeTab !== 'api-docs' && (
               <header className="mb-10">
                 <h1 className="text-3xl font-bold mb-2">
                   {PAGE_TITLES[activeTab] || 'VoxLab'}
@@ -162,14 +178,16 @@ export default function AdminDashboard() {
               </header>
             )}
 
+
             {/* 页面内容 */}
             {renderContent()}
 
-            {/* 底部占位 */}
-            <div className="h-40 w-full" />
+            {/* 底部占位 - 仅在非通话间渲染 */}
+            {activeTab !== 'conversation' && <div className="h-40 w-full" />}
           </div>
         </main>
       </div>
     </div>
+
   );
 }

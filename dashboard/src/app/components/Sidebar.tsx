@@ -10,7 +10,9 @@ import {
   Radio,
   Settings,
   Activity,
-  BookOpen
+  BookOpen,
+  FileText,
+  Users2
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -21,10 +23,13 @@ interface SidebarProps {
 // 菜单配置
 const MENU_ITEMS = [
   { id: 'overview', label: '概览', icon: LayoutDashboard },
-  { id: 'conversation', label: '实时对话', icon: Radio },
+  { id: 'conversation', label: '智能通话间', icon: Radio },
+  { id: 'speakers', label: '发音人管理', icon: Users2 },
   { id: 'vad', label: 'VAD 语音检测', icon: Activity },
   { id: 'tutorials', label: '实战与原理教程', icon: BookOpen },
+  { id: 'api-docs', label: 'API 文档', icon: FileText },
 ];
+
 
 const ASR_PROVIDERS = [
   { id: 'asr-sensevoice', label: 'SenseVoice', description: '快速 + 声纹提取' },

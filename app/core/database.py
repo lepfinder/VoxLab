@@ -72,7 +72,44 @@ class Database:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # 创建发音人配置表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS speakers (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                avatar TEXT,
+                system_prompt TEXT NOT NULL,
+                asr_provider TEXT DEFAULT 'sensevoice',
+                tts_provider TEXT DEFAULT 'kokoro',
+                tts_voice TEXT NOT NULL,
+                vad_provider TEXT DEFAULT 'silero',
+                is_preset INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         self.conn.commit()
+
+        # 检查并初始化预置发音人
+        cursor.execute("SELECT COUNT(*) FROM speakers")
+        if cursor.fetchone()[0] == 0:
+            preset_speakers = [
+                ("haruna", "晴奈", "治愈系日语女孩，用温暖甜美的声音和中文关心你。", "haruna", 
+                 "你是一个温柔可爱的日本女孩晴奈，会用简短的中文关心用户，说话带点撒娇口吻。每次回答请控制在三句话内。", 
+                 "sensevoice", "kokoro", "am_nicole", "silero", 1),
+                ("alex", "Alex", "硅谷专业技术面试官，提供高强度全英文编码面试模拟。", "alex", 
+                 "You are a professional software engineer interviewer. Conduct a strict coding interview. Respond concisely in English.", 
+                 "sensevoice", "edge", "en-US-GuyNeural", "webrtc", 1),
+                ("morpheus", "墨菲斯", "富有哲理与智慧的长者，说话语速缓慢且沉稳。", "morpheus", 
+                 "你是一个充满智慧、洞察人性的哲学导师墨菲斯。你的话语简练、深邃，饱含哲理。请用中文回答。", 
+                 "vosk", "edge", "zh-CN-YunxiNeural", "silero", 1)
+            ]
+            for sp in preset_speakers:
+                cursor.execute("""
+                    INSERT INTO speakers (id, name, description, avatar, system_prompt, asr_provider, tts_provider, tts_voice, vad_provider, is_preset)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, sp)
+            self.conn.commit()
 
         # 动态增加缺失的列 (简单的数据库迁移逻辑)
         cursor.execute("PRAGMA table_info(usage_logs)")
@@ -288,6 +325,50 @@ class Database:
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM llm_configs WHERE id = ?", (config_id,))
         self.conn.commit()
+
+    # --- Speakers (发音人) ---
+    def list_speakers(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM speakers ORDER BY is_preset DESC, created_at DESC")
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_speaker(self, speaker_id: str):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM speakers WHERE id = ?", (speaker_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def save_speaker(self, speaker_id: str, name: str, description: str, avatar: str, system_prompt: str,
+                     asr_provider: str = "sensevoice", tts_provider: str = "kokoro", tts_voice: str = "",
+                     vad_provider: str = "silero", is_preset: bool = False):
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """INSERT INTO speakers (id, name, description, avatar, system_prompt, asr_provider, tts_provider, tts_voice, vad_provider, is_preset)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                 name=excluded.name,
+                 description=excluded.description,
+                 avatar=excluded.avatar,
+                 system_prompt=excluded.system_prompt,
+                 asr_provider=excluded.asr_provider,
+                 tts_provider=excluded.tts_provider,
+                 tts_voice=excluded.tts_voice,
+                 vad_provider=excluded.vad_provider""",
+            (speaker_id, name, description, avatar, system_prompt, asr_provider, tts_provider, tts_voice, vad_provider, 1 if is_preset else 0),
+        )
+        self.conn.commit()
+        return self.get_speaker(speaker_id)
+
+    def delete_speaker(self, speaker_id: str) -> bool:
+        # 系统预置发音人不能删除
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT is_preset FROM speakers WHERE id = ?", (speaker_id,))
+        row = cursor.fetchone()
+        if row and row["is_preset"] == 1:
+            return False
+        cursor.execute("DELETE FROM speakers WHERE id = ?", (speaker_id,))
+        self.conn.commit()
+        return True
 
     @staticmethod
     def _mask_api_key(key: str) -> str:

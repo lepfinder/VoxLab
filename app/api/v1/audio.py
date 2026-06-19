@@ -240,6 +240,33 @@ async def speech(request_body: SpeechRequest, request: Request):
         logger.error(f"[TTS] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+from pydantic import BaseModel
+
+class SpeakerSpeechRequest(BaseModel):
+    speaker_id: str
+    text: str
+    response_format: str = "mp3"
+
+
+@router.post("/speech/speaker")
+async def speech_by_speaker(request_body: SpeakerSpeechRequest, request: Request):
+    from app.core.database import db
+    sp = db.get_speaker(request_body.speaker_id)
+    if not sp:
+        raise HTTPException(status_code=404, detail="Speaker not found")
+        
+    # 重组参数调用底层的 speech 逻辑
+    from app.schemas.openai import SpeechRequest
+    # 如果是 opus，则请求 opus，其它则按传入格式生成
+    speech_req = SpeechRequest(
+        model=sp["tts_provider"],
+        input=request_body.text,
+        voice=sp["tts_voice"],
+        response_format=request_body.response_format
+    )
+    return await speech(speech_req, request)
+
+
 @router.post("/transcriptions")
 async def transcribe(
     request: Request,

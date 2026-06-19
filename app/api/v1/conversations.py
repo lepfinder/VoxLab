@@ -102,3 +102,48 @@ async def save_llm_config(req: LLMConfigUpsert):
 async def delete_llm_config(cfg_id: str):
     db.delete_llm_config(cfg_id)
     return {"ok": True}
+
+
+# ---------------- Speakers (发音人) ----------------
+
+class SpeakerUpsert(BaseModel):
+    id: Optional[str] = None
+    name: str
+    description: Optional[str] = ""
+    avatar: Optional[str] = "default"
+    system_prompt: str
+    asr_provider: Optional[str] = "sensevoice"
+    tts_provider: Optional[str] = "kokoro"
+    tts_voice: str
+    vad_provider: Optional[str] = "silero"
+
+
+@router.get("/speakers")
+async def list_speakers():
+    return db.list_speakers()
+
+
+@router.post("/speakers")
+async def save_speaker(req: SpeakerUpsert):
+    sp_id = req.id or str(uuid.uuid4())
+    saved = db.save_speaker(
+        sp_id,
+        req.name,
+        req.description,
+        req.avatar,
+        req.system_prompt,
+        req.asr_provider,
+        req.tts_provider,
+        req.tts_voice,
+        req.vad_provider
+    )
+    return saved
+
+
+@router.delete("/speakers/{sp_id}")
+async def delete_speaker(sp_id: str):
+    success = db.delete_speaker(sp_id)
+    if not success:
+        raise HTTPException(status_code=400, detail="预置发音人不能被删除")
+    return {"ok": True}
+
