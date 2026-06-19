@@ -54,25 +54,6 @@ export default function SenseVoicePage({ selectedKey }: SenseVoicePageProps) {
       githubUrl="https://github.com/FunAudioLLM/SenseVoice"
       model="sensevoice"
     >
-      {/* 参数说明 */}
-      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 shadow-sm mb-6">
-        <h3 className="text-lg font-semibold mb-4">模型参数</h3>
-        <div className="space-y-3 text-sm">
-          <div className="flex items-start gap-3 p-3 bg-[var(--background)] rounded-lg">
-            <code className="text-blue-600 dark:text-blue-400 font-mono whitespace-nowrap">language</code>
-            <span className="text-[var(--muted-text)]">识别语言，默认 "zh"（中文）</span>
-          </div>
-          <div className="flex items-start gap-3 p-3 bg-[var(--background)] rounded-lg">
-            <code className="text-blue-600 dark:text-blue-400 font-mono whitespace-nowrap">use_itn</code>
-            <span className="text-[var(--muted-text)]">是否启用逆文本正则化，将数字转换为阿拉伯数字格式</span>
-          </div>
-          <div className="flex items-start gap-3 p-3 bg-[var(--background)] rounded-lg">
-            <code className="text-blue-600 dark:text-blue-400 font-mono whitespace-nowrap">merge_vad</code>
-            <span className="text-[var(--muted-text)]">合并 VAD 检测到的短语音片段</span>
-          </div>
-        </div>
-      </div>
-
       <TestPanel
         type="asr"
         onTest={handleTest}

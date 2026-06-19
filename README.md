@@ -8,7 +8,7 @@
   - **Chat**: 支持 Qwen, Llama3, GLM 等主流大模型。
   - **ASR (语音转文字)**: 集成 SenseVoice, Qwen-Audio, Vosk。
   - **TTS (文字转语音)**: 集成 Kokoro, VoxCPM, Qwen-TTS, Edge-TTS。
-- **🔌 OpenAI 兼容**：标准化的 `/v1/chat/completions`、`/v1/audio/transcriptions` 和 `/v1/audio/speech` 接口，可无缝接入 Dify、FastGPT 等客户端。
+- **🔌 OpenAI 兼容**：标准化的 `/api/v1/chat/completions`、`/api/v1/audio/transcriptions` 和 `/api/v1/audio/speech` 接口，可无缝接入 Dify、FastGPT 等客户端。
 - **📊 现代化管理面板**：
   - **可视化仪表盘**: 实时监控系统请求量、Token 消耗及响应时长。
   - **Token 管理**: 自定义多组 API Key，支持权限控制。
@@ -72,10 +72,10 @@ python main.py
 
 | 接口类型 | 端点 | 描述 |
 | :--- | :--- | :--- |
-| **Chat** | `/v1/chat/completions` | 文本对话生成 |
-| **ASR** | `/v1/audio/transcriptions` | 语音转文字 (支持文件上传) |
-| **TTS** | `/v1/audio/speech` | 文字转语音 (返回音频流) |
-| **Admin** | `/v1/admin/*` | 系统状态、Token 及日志管理 |
+| **Chat** | `/api/v1/chat/completions` | 文本对话生成 |
+| **ASR** | `/api/v1/audio/transcriptions` | 语音转文字 (支持文件上传) |
+| **TTS** | `/api/v1/audio/speech` | 文字转语音 (返回音频流) |
+| **Admin** | `/admin/*` | 系统状态、Token 及日志管理 |
 
 ## ⚙️ 配置文件
 修改根目录下的 `config.py` 来配置模型路径、数据库连接及模型自动卸载时长。

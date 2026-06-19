@@ -54,25 +54,6 @@ export default function VoskPage({ selectedKey }: VoskPageProps) {
       githubUrl="https://github.com/alphacep/vosk-api"
       model="vosk"
     >
-      {/* 特点说明 */}
-      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 shadow-sm mb-6">
-        <h3 className="text-lg font-semibold mb-4">模型特点</h3>
-        <div className="space-y-3 text-sm">
-          <div className="flex items-start gap-3 p-3 bg-[var(--background)] rounded-lg">
-            <span className="text-purple-600 dark:text-purple-400 font-semibold whitespace-nowrap">小模型</span>
-            <span className="text-[var(--muted-text)]">中文小模型仅约 50MB，适合内存有限的设备</span>
-          </div>
-          <div className="flex items-start gap-3 p-3 bg-[var(--background)] rounded-lg">
-            <span className="text-green-600 dark:text-green-400 font-semibold whitespace-nowrap">纯 CPU</span>
-            <span className="text-[var(--muted-text)]">无需 GPU，在 CPU 上也能流畅运行</span>
-          </div>
-          <div className="flex items-start gap-3 p-3 bg-[var(--background)] rounded-lg">
-            <span className="text-orange-600 dark:text-orange-400 font-semibold whitespace-nowrap">完全离线</span>
-            <span className="text-[var(--muted-text)]">无需网络连接，数据完全本地处理</span>
-          </div>
-        </div>
-      </div>
-
       <TestPanel
         type="asr"
         onTest={handleTest}

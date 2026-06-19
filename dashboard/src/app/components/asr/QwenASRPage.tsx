@@ -54,21 +54,6 @@ export default function QwenASRPage({ selectedKey }: QwenASRPageProps) {
       githubUrl="https://github.com/QwenLM/Qwen-Audio"
       model="qwen-asr"
     >
-      {/* 平台说明 */}
-      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 shadow-sm mb-6">
-        <h3 className="text-lg font-semibold mb-4">跨平台支持</h3>
-        <div className="space-y-3 text-sm">
-          <div className="flex items-start gap-3 p-3 bg-[var(--background)] rounded-lg">
-            <span className="text-blue-600 dark:text-blue-400 font-semibold whitespace-nowrap">macOS</span>
-            <span className="text-[var(--muted-text)]">使用 MLX 框架，充分利用 Apple Silicon 统一内存架构，模型量化为 4-bit</span>
-          </div>
-          <div className="flex items-start gap-3 p-3 bg-[var(--background)] rounded-lg">
-            <span className="text-green-600 dark:text-green-400 font-semibold whitespace-nowrap">Linux</span>
-            <span className="text-[var(--muted-text)]">使用 PyTorch 框架，支持 CUDA 加速，模型为官方 bf16 版本</span>
-          </div>
-        </div>
-      </div>
-
       <TestPanel
         type="asr"
         onTest={handleTest}
