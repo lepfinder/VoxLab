@@ -197,19 +197,19 @@ async def speech(request_body: SpeechRequest, request: Request):
 
                 logger.info(f"[TTS] Finished. Received samples: {total_samples_received}, Sent packets: {total_packets_sent} ({total_packets_sent*60}ms)")
 
-            return StreamingResponse(opus_stream(), media_type="audio/ogg")
+            return StreamingResponse(opus_stream(), media_type="audio/ogg", headers={"X-Model-Name": request_body.model})
 
         # 标准格式处理
         if "edge" in model_key:
             if request_body.response_format == "pcm":
-                return StreamingResponse(edge_tts_provider.stream_generate(request_body.input, request_body.voice), media_type="audio/pcm")
+                return StreamingResponse(edge_tts_provider.stream_generate(request_body.input, request_body.voice), media_type="audio/pcm", headers={"X-Model-Name": request_body.model})
             else:
                 async def mp3_stream():
                     import edge_tts
                     c = edge_tts.Communicate(request_body.input, request_body.voice)
                     async for chunk in c.stream():
                         if chunk["type"] == "audio": yield chunk["data"]
-                return StreamingResponse(mp3_stream(), media_type="audio/mpeg")
+                return StreamingResponse(mp3_stream(), media_type="audio/mpeg", headers={"X-Model-Name": request_body.model})
         
         elif "kokoro" in model_key:
             p = KokoroProvider()
@@ -220,7 +220,7 @@ async def speech(request_body: SpeechRequest, request: Request):
         elif "qwen" in model_key:
             p = QwenTTSProvider(mode="custom" if request_body.voice != "None" else "design")
             if request_body.response_format == "pcm":
-                return StreamingResponse(p.stream_generate(request_body.input, voice=request_body.voice), media_type="audio/pcm")
+                return StreamingResponse(p.stream_generate(request_body.input, voice=request_body.voice), media_type="audio/pcm", headers={"X-Model-Name": request_body.model})
             output_path = p.generate(request_body.input, voice=request_body.voice)
 
         elif "omni" in model_key: output_path = omni_provider.generate(request_body.input)
@@ -228,7 +228,7 @@ async def speech(request_body: SpeechRequest, request: Request):
         else: raise HTTPException(status_code=400, detail=f"Unsupported model: {request_body.model}")
 
         if output_path and os.path.exists(output_path):
-            return FileResponse(output_path, media_type="audio/wav", background=BackgroundTask(os.remove, output_path))
+            return FileResponse(output_path, media_type="audio/wav", background=BackgroundTask(os.remove, output_path), headers={"X-Model-Name": request_body.model})
         raise HTTPException(status_code=500, detail="Failed to generate audio")
 
     except Exception as e:
@@ -261,7 +261,12 @@ async def transcribe(
         result = sensevoice_provider.transcribe(data)
         
         logger.info(f"[ASR] Transcription result: {result.get('text')}")
-        return TranscriptionResponse(text=result.get("text", ""))
+        resp = TranscriptionResponse(text=result.get("text", ""))
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            content=resp.model_dump(),
+            headers={"X-Model-Name": model},
+        )
         
     except Exception as e:
         logger.error(f"[ASR] Error: {e}")

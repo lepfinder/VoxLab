@@ -13,12 +13,13 @@ import QwenTTSPage from './components/tts/QwenTTSPage';
 import VoxCPMPage from './components/tts/VoxCPMPage';
 import OmniPage from './components/tts/OmniPage';
 import EdgePage from './components/tts/EdgePage';
+import ConversationPage from './components/ConversationPage';
+import SystemConfigPage from './components/SystemConfigPage';
 
 // 页面标题映射
 const PAGE_TITLES: Record<string, string> = {
   overview: '系统概览',
-  tokens: 'Token 管理',
-  logs: '调用日志',
+  conversation: '实时对话',
   'asr-sensevoice': 'SenseVoice',
   'asr-qwen': 'Qwen ASR',
   'asr-vosk': 'Vosk',
@@ -90,6 +91,20 @@ export default function AdminDashboard() {
         return <Tokens tokens={tokens} onCreateToken={handleCreateToken} onDeleteToken={handleDeleteToken} />;
       case 'logs':
         return <Logs logs={logs} />;
+      case 'conversation':
+        return <ConversationPage selectedKey={selectedKey} onJumpToConfig={() => setActiveTab('system-config')} />;
+      case 'system-config':
+        return (
+          <SystemConfigPage
+            tokens={tokens}
+            onCreateToken={handleCreateToken}
+            onDeleteToken={handleDeleteToken}
+            logs={logs}
+            isDarkMode={isDarkMode}
+            onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+            defaultTab="general"
+          />
+        );
       case 'asr-sensevoice':
         return <SenseVoicePage selectedKey={selectedKey} />;
       case 'asr-qwen':
@@ -118,15 +133,15 @@ export default function AdminDashboard() {
         <Sidebar
           activeTab={activeTab}
           onTabChange={setActiveTab}
-          isDarkMode={isDarkMode}
-          onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
         />
 
         {/* 主内容区 */}
         <main className="flex-1 overflow-y-auto p-8 pb-24 custom-scrollbar">
           <div className="max-w-6xl mx-auto">
-            {/* 页面标题 - 仅在非模型页面显示 */}
-            {!activeTab.startsWith('asr-') && !activeTab.startsWith('tts-') && (
+            {/* 页面标题 - 仅在非模型/非配置页显示 */}
+            {!activeTab.startsWith('asr-')
+              && !activeTab.startsWith('tts-')
+              && activeTab !== 'system-config' && (
               <header className="mb-10">
                 <h1 className="text-3xl font-bold mb-2">
                   {PAGE_TITLES[activeTab] || 'VoxLab'}

@@ -3,28 +3,23 @@
 import React, { useState } from 'react';
 import {
   LayoutDashboard,
-  Key,
-  History,
   Mic,
   Volume2,
-  Moon,
-  Sun,
   ChevronDown,
-  Cpu
+  Cpu,
+  Radio,
+  Settings
 } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
-  isDarkMode: boolean;
-  onToggleDarkMode: () => void;
 }
 
 // 菜单配置
 const MENU_ITEMS = [
   { id: 'overview', label: '概览', icon: LayoutDashboard },
-  { id: 'tokens', label: 'Token 管理', icon: Key },
-  { id: 'logs', label: '调用日志', icon: History },
+  { id: 'conversation', label: '实时对话', icon: Radio },
 ];
 
 const ASR_PROVIDERS = [
@@ -41,7 +36,7 @@ const TTS_PROVIDERS = [
   { id: 'tts-edge', label: 'Edge TTS', description: '云端免费' },
 ];
 
-export default function Sidebar({ activeTab, onTabChange, isDarkMode, onToggleDarkMode }: SidebarProps) {
+export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const [expandedGroups, setExpandedGroups] = useState({
     asr: true,
     tts: true,
@@ -120,14 +115,18 @@ export default function Sidebar({ activeTab, onTabChange, isDarkMode, onToggleDa
         </div>
       </nav>
 
-      {/* 底部：深色模式切换 */}
-      <div className="mt-auto pt-6 border-t border-[var(--card-border)]">
+      {/* 底部：固定的系统配置入口 */}
+      <div className="mt-auto pt-2 border-t border-[var(--card-border)]">
         <button
-          onClick={onToggleDarkMode}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-[var(--muted-text)] hover:text-[var(--foreground)] hover:bg-[var(--foreground)]/5 transition-all"
+          onClick={() => onTabChange('system-config')}
+          className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-all ${
+            activeTab === 'system-config'
+              ? 'bg-blue-600/10 text-blue-600 dark:text-blue-400'
+              : 'text-[var(--muted-text)] hover:text-[var(--foreground)] hover:bg-[var(--foreground)]/5'
+          }`}
         >
-          {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-          {isDarkMode ? '浅色模式' : '深色模式'}
+          <Settings size={16} />
+          系统配置
         </button>
       </div>
     </aside>

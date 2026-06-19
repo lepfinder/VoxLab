@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import ModelCard from '../shared/ModelCard';
+import ModelLayout from '../shared/ModelLayout';
 import TestPanel from '../shared/TestPanel';
 import ApiExample from '../shared/ApiExample';
 
@@ -44,17 +44,16 @@ export default function VoskPage({ selectedKey }: VoskPageProps) {
   -F "model=vosk"`;
 
   return (
-    <div>
-      <ModelCard
-        name="Vosk"
-        description="轻量级离线语音识别引擎，支持多种语言，适合嵌入式设备和资源受限环境"
-        features={['轻量级', '纯离线', '低资源占用', '多语言', '跨平台']}
-        modelId="vosk-model-small-cn-0.22"
-        framework="Vosk (Kaldi-based)"
-        useCases={['嵌入式设备', '离线转写', '资源受限环境', '实时流式识别']}
-        githubUrl="https://github.com/alphacep/vosk-api"
-      />
-
+    <ModelLayout
+      name="Vosk"
+      description="轻量级离线语音识别引擎，支持多种语言，适合嵌入式设备和资源受限环境"
+      features={['轻量级', '纯离线', '低资源占用', '多语言', '跨平台']}
+      modelId="vosk-model-small-cn-0.22"
+      framework="Vosk (Kaldi-based)"
+      useCases={['嵌入式设备', '离线转写', '资源受限环境', '实时流式识别']}
+      githubUrl="https://github.com/alphacep/vosk-api"
+      model="vosk"
+    >
       {/* 特点说明 */}
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 shadow-sm mb-6">
         <h3 className="text-lg font-semibold mb-4">模型特点</h3>
@@ -82,6 +81,6 @@ export default function VoskPage({ selectedKey }: VoskPageProps) {
       />
 
       <ApiExample code={curlCode} />
-    </div>
+    </ModelLayout>
   );
 }

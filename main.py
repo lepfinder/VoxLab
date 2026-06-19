@@ -68,18 +68,15 @@ async def auth_and_log_middleware(request: Request, call_next):
     # 检查是否是本地请求，如果是则免鉴权
     client_host = request.client.host
     is_local = client_host in ("127.0.0.1", "localhost", "::1")
-    
+
     if not is_local and not db.verify_token(token):
         return JSONResponse(status_code=401, content={"error": "Unauthorized: Invalid or missing API Key"})
 
-    # 尝试从 state 中获取模型名（由路由设置）
-    model_name = getattr(request.state, "model_name", "unknown")
-
     response = await call_next(request)
-    
-    # 再次尝试从 state 获取（有些路由是在处理过程中设置的）
-    if model_name == "unknown":
-        model_name = getattr(request.state, "model_name", "unknown")
+
+    # 模型名从响应头 X-Model-Name 读取（route 显式设置），
+    # 避免 request.state 在 BaseHTTPMiddleware 跨 call_next 任务不传递的问题
+    model_name = response.headers.get("x-model-name") or "unknown"
     duration = time.time() - start_time
     
     # 统计 Token
@@ -101,9 +98,13 @@ async def auth_and_log_middleware(request: Request, call_next):
 from app.api.v1 import audio as audio_v1
 from app.api.v1 import admin as admin_v1
 from app.api.v1 import voiceprint as voiceprint_v1
+from app.api.v1 import chat as chat_v1
+from app.api.v1 import conversations as conversations_v1
 app.include_router(audio_v1.router)
 app.include_router(admin_v1.router)
 app.include_router(voiceprint_v1.router)
+app.include_router(chat_v1.router)
+app.include_router(conversations_v1.router)
 
 @app.get("/health")
 async def health():

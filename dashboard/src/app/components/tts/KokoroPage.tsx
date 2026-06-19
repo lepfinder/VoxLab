@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import ModelCard from '../shared/ModelCard';
-import TestPanel from '../shared/TestPanel';
+import ModelLayout from '../shared/ModelLayout';
 import ApiExample from '../shared/ApiExample';
 
 interface KokoroPageProps {
@@ -97,17 +96,16 @@ export default function KokoroPage({ selectedKey }: KokoroPageProps) {
   }' --output output.wav`;
 
   return (
-    <div>
-      <ModelCard
-        name="Kokoro"
-        description="轻量级高质量语音合成模型，支持多语言多音色，生成自然流畅的语音"
-        features={['多语言', '36种音色', '高质量', '快速推理', '低资源占用']}
-        modelId="hexgrad/Kokoro-82M"
-        framework="PyTorch"
-        useCases={['语音助手', '有声书', '多语言合成', '实时 TTS']}
-        githubUrl="https://github.com/hexgrad/kokoro"
-      />
-
+    <ModelLayout
+      name="Kokoro"
+      description="轻量级高质量语音合成模型，支持多语言多音色，生成自然流畅的语音"
+      features={['多语言', '36种音色', '高质量', '快速推理', '低资源占用']}
+      modelId="hexgrad/Kokoro-82M"
+      framework="PyTorch"
+      useCases={['语音助手', '有声书', '多语言合成', '实时 TTS']}
+      githubUrl="https://github.com/hexgrad/kokoro"
+      model="kokoro"
+    >
       {/* 音色选择 */}
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 shadow-sm mb-6">
         <h3 className="text-lg font-semibold mb-4">音色选择</h3>
@@ -167,6 +165,6 @@ export default function KokoroPage({ selectedKey }: KokoroPageProps) {
       </div>
 
       <ApiExample code={curlCode} />
-    </div>
+    </ModelLayout>
   );
 }

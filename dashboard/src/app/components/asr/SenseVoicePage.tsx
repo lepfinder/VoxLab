@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import ModelCard from '../shared/ModelCard';
+import ModelLayout from '../shared/ModelLayout';
 import TestPanel from '../shared/TestPanel';
 import ApiExample from '../shared/ApiExample';
 
@@ -44,17 +44,16 @@ export default function SenseVoicePage({ selectedKey }: SenseVoicePageProps) {
   -F "model=sensevoice"`;
 
   return (
-    <div>
-      <ModelCard
-        name="SenseVoice"
-        description="阿里巴巴达摩院开源的高精度语音识别模型，支持多语言、情感识别和声纹特征提取"
-        features={['高精度', '声纹提取', 'VAD 端点检测', '多语言支持', '快速推理']}
-        modelId="iic/SenseVoiceSmall"
-        framework="FunASR + PyTorch"
-        useCases={['实时语音转写', '会议记录', '语音助手', '声纹认证']}
-        githubUrl="https://github.com/FunAudioLLM/SenseVoice"
-      />
-
+    <ModelLayout
+      name="SenseVoice"
+      description="阿里巴巴达摩院开源的高精度语音识别模型，支持多语言、情感识别和声纹特征提取"
+      features={['高精度', '声纹提取', 'VAD 端点检测', '多语言支持', '快速推理']}
+      modelId="iic/SenseVoiceSmall"
+      framework="FunASR + PyTorch"
+      useCases={['实时语音转写', '会议记录', '语音助手', '声纹认证']}
+      githubUrl="https://github.com/FunAudioLLM/SenseVoice"
+      model="sensevoice"
+    >
       {/* 参数说明 */}
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 shadow-sm mb-6">
         <h3 className="text-lg font-semibold mb-4">模型参数</h3>
@@ -82,6 +81,6 @@ export default function SenseVoicePage({ selectedKey }: SenseVoicePageProps) {
       />
 
       <ApiExample code={curlCode} />
-    </div>
+    </ModelLayout>
   );
 }

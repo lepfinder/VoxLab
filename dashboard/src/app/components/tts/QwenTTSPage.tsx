@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import ModelCard from '../shared/ModelCard';
+import ModelLayout from '../shared/ModelLayout';
 import ApiExample from '../shared/ApiExample';
 
 interface QwenTTSPageProps {
@@ -68,17 +68,16 @@ export default function QwenTTSPage({ selectedKey }: QwenTTSPageProps) {
   }' --output output.wav`;
 
   return (
-    <div>
-      <ModelCard
-        name="Qwen TTS"
-        description="通义千问语音合成模型，支持三种模式：通过文字描述生成音色、使用预设音色、克隆参考音频音色"
-        features={['三种模式', '音色克隆', '指令控制', '流式输出', '高质量']}
-        modelId="mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit"
-        framework="MLX (macOS) / PyTorch (Linux)"
-        useCases={['个性化语音', '音色克隆', '多风格合成', '有声书']}
-        githubUrl="https://github.com/QwenLM/Qwen3-TTS"
-      />
-
+    <ModelLayout
+      name="Qwen TTS"
+      description="通义千问语音合成模型，支持三种模式：通过文字描述生成音色、使用预设音色、克隆参考音频音色"
+      features={['三种模式', '音色克隆', '指令控制', '流式输出', '高质量']}
+      modelId="mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit"
+      framework="MLX (macOS) / PyTorch (Linux)"
+      useCases={['个性化语音', '音色克隆', '多风格合成', '有声书']}
+      githubUrl="https://github.com/QwenLM/Qwen3-TTS"
+      model="qwen-tts"
+    >
       {/* 模式选择 */}
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 shadow-sm mb-6">
         <h3 className="text-lg font-semibold mb-4">合成模式</h3>
@@ -183,6 +182,6 @@ export default function QwenTTSPage({ selectedKey }: QwenTTSPageProps) {
       </div>
 
       <ApiExample code={curlCode} />
-    </div>
+    </ModelLayout>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import ModelCard from '../shared/ModelCard';
+import ModelLayout from '../shared/ModelLayout';
 import ApiExample from '../shared/ApiExample';
 
 interface EdgePageProps {
@@ -65,16 +65,15 @@ export default function EdgePage({ selectedKey }: EdgePageProps) {
   }' --output output.mp3`;
 
   return (
-    <div>
-      <ModelCard
-        name="Edge TTS"
-        description="微软 Edge 浏览器提供的云端语音合成服务，免费且高质量，支持多种语言和音色"
-        features={['云端免费', '多语言', '多音色', '高质量', '无需本地资源']}
-        modelId="Microsoft Edge TTS"
-        framework="Edge TTS API"
-        useCases={['云端合成', '多语言场景', '高质量语音', '无 GPU 环境']}
-      />
-
+    <ModelLayout
+      name="Edge TTS"
+      description="微软 Edge 浏览器提供的云端语音合成服务，免费且高质量，支持多种语言和音色"
+      features={['云端免费', '多语言', '多音色', '高质量', '无需本地资源']}
+      modelId="Microsoft Edge TTS"
+      framework="Edge TTS API"
+      useCases={['云端合成', '多语言场景', '高质量语音', '无 GPU 环境']}
+      model="edge-tts"
+    >
       {/* 音色选择 */}
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 shadow-sm mb-6">
         <h3 className="text-lg font-semibold mb-4">音色选择</h3>
@@ -135,6 +134,6 @@ export default function EdgePage({ selectedKey }: EdgePageProps) {
       </div>
 
       <ApiExample code={curlCode} />
-    </div>
+    </ModelLayout>
   );
 }

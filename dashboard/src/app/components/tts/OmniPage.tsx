@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import ModelCard from '../shared/ModelCard';
+import ModelLayout from '../shared/ModelLayout';
 import ApiExample from '../shared/ApiExample';
 
 interface OmniPageProps {
@@ -55,17 +55,16 @@ export default function OmniPage({ selectedKey }: OmniPageProps) {
   }' --output output.wav`;
 
   return (
-    <div>
-      <ModelCard
-        name="OmniVoice"
-        description="K2-FSA 开源的全能语音合成模型，提供基础但高质量的语音合成能力"
-        features={['基础 TTS', '高质量', '简单易用', '低延迟']}
-        modelId="k2-fsa/OmniVoice"
-        framework="PyTorch"
-        useCases={['基础语音合成', '快速原型', '简单播报']}
-        githubUrl="https://github.com/k2-fsa/OmniVoice"
-      />
-
+    <ModelLayout
+      name="OmniVoice"
+      description="K2-FSA 开源的全能语音合成模型，提供基础但高质量的语音合成能力"
+      features={['基础 TTS', '高质量', '简单易用', '低延迟']}
+      modelId="k2-fsa/OmniVoice"
+      framework="PyTorch"
+      useCases={['基础语音合成', '快速原型', '简单播报']}
+      githubUrl="https://github.com/k2-fsa/OmniVoice"
+      model="omni"
+    >
       {/* 特点说明 */}
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 shadow-sm mb-6">
         <h3 className="text-lg font-semibold mb-4">模型特点</h3>
@@ -120,6 +119,6 @@ export default function OmniPage({ selectedKey }: OmniPageProps) {
       </div>
 
       <ApiExample code={curlCode} />
-    </div>
+    </ModelLayout>
   );
 }

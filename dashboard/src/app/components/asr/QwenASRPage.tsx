@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import ModelCard from '../shared/ModelCard';
+import ModelLayout from '../shared/ModelLayout';
 import TestPanel from '../shared/TestPanel';
 import ApiExample from '../shared/ApiExample';
 
@@ -44,17 +44,16 @@ export default function QwenASRPage({ selectedKey }: QwenASRPageProps) {
   -F "model=qwen"`;
 
   return (
-    <div>
-      <ModelCard
-        name="Qwen ASR"
-        description="通义千问语音识别模型，针对 Apple Silicon 优化，使用 MLX 框架实现高效推理"
-        features={['Apple Silicon 优化', 'MLX 加速', '低延迟', '高精度']}
-        modelId="mlx-community/Qwen3-ASR-0.6B-4bit"
-        framework="MLX (macOS) / PyTorch (Linux)"
-        useCases={['本地语音识别', '离线转写', '隐私敏感场景']}
-        githubUrl="https://github.com/QwenLM/Qwen-Audio"
-      />
-
+    <ModelLayout
+      name="Qwen ASR"
+      description="通义千问语音识别模型，针对 Apple Silicon 优化，使用 MLX 框架实现高效推理"
+      features={['Apple Silicon 优化', 'MLX 加速', '低延迟', '高精度']}
+      modelId="mlx-community/Qwen3-ASR-0.6B-4bit"
+      framework="MLX (macOS) / PyTorch (Linux)"
+      useCases={['本地语音识别', '离线转写', '隐私敏感场景']}
+      githubUrl="https://github.com/QwenLM/Qwen-Audio"
+      model="qwen-asr"
+    >
       {/* 平台说明 */}
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 shadow-sm mb-6">
         <h3 className="text-lg font-semibold mb-4">跨平台支持</h3>
@@ -78,6 +77,6 @@ export default function QwenASRPage({ selectedKey }: QwenASRPageProps) {
       />
 
       <ApiExample code={curlCode} />
-    </div>
+    </ModelLayout>
   );
 }

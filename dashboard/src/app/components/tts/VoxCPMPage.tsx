@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import ModelCard from '../shared/ModelCard';
+import ModelLayout from '../shared/ModelLayout';
 import ApiExample from '../shared/ApiExample';
 
 interface VoxCPMPageProps {
@@ -56,17 +56,16 @@ export default function VoxCPMPage({ selectedKey }: VoxCPMPageProps) {
   }' --output output.wav`;
 
   return (
-    <div>
-      <ModelCard
-        name="VoxCPM"
-        description="清华 OpenBMB 开源的语音合成模型，支持通过指令控制语音情感和风格"
-        features={['情感控制', '指令驱动', '高质量', '中文优化']}
-        modelId="openbmb/VoxCPM2"
-        framework="PyTorch"
-        useCases={['情感语音合成', '有声书', '虚拟助手', '多风格播报']}
-        githubUrl="https://github.com/OpenBMB/VoxCPM"
-      />
-
+    <ModelLayout
+      name="VoxCPM"
+      description="清华 OpenBMB 开源的语音合成模型，支持通过指令控制语音情感和风格"
+      features={['情感控制', '指令驱动', '高质量', '中文优化']}
+      modelId="openbmb/VoxCPM2"
+      framework="PyTorch"
+      useCases={['情感语音合成', '有声书', '虚拟助手', '多风格播报']}
+      githubUrl="https://github.com/OpenBMB/VoxCPM"
+      model="voxcpm"
+    >
       {/* 参数说明 */}
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 shadow-sm mb-6">
         <h3 className="text-lg font-semibold mb-4">情感控制</h3>
@@ -137,6 +136,6 @@ export default function VoxCPMPage({ selectedKey }: VoxCPMPageProps) {
       </div>
 
       <ApiExample code={curlCode} />
-    </div>
+    </ModelLayout>
   );
 }
