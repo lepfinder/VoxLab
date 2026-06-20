@@ -128,36 +128,87 @@ export default function StreamingConversationPage({ selectedKey, onJumpToConfig 
     }
   };
 
-  useEffect(() => {
-    loadSpeakers();
-  }, []);
+  // 用于防止 React 开发模式或并发引起的多次重复创建会话锁
+  const creatingConvsRef = useRef<Record<string, boolean>>({});
 
-  // --- 初始化多轮会话 ID ---
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/admin/conversations');
-        const data = await res.json();
-        if (data.length > 0) {
-          setActiveId(data[0].id);
+  // --- 智能为 Speaker 查找或创建会话（每个发声人永久唯一） ---
+  const initConversationForSpeaker = useCallback(async (speaker: Speaker) => {
+    try {
+      const targetTitle = `与 ${speaker.name} 的实时通话`;
+
+      // 1. 如果检测到有其他并发流程正在为该发音人创建会话，我们稍微等一下再查
+      if (creatingConvsRef.current[targetTitle]) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        // 重新拉取以复用刚才创建好的
+        const listRes = await fetch('/admin/conversations');
+        const conversations = await listRes.json();
+        const existingConv = conversations.find((c: any) => c.title === targetTitle);
+        if (existingConv) {
+          setActiveId(existingConv.id);
+          const check = await fetch(`/admin/conversations/${existingConv.id}`);
+          const data = await check.json();
+          setMessages(data.messages || []);
           return;
         }
+      }
+
+      // 2. 直接请求后端获取当前所有的会话列表，用于全局查重与复用
+      const listRes = await fetch('/admin/conversations');
+      const conversations = await listRes.json();
+      
+      // 3. 在后端已存数据中寻找名称匹配的专属会话
+      const existingConv = conversations.find((c: any) => c.title === targetTitle);
+
+      if (existingConv) {
+        // 找到了已存在的唯一会话，直接复用
+        const localKey = `conv_id_${speaker.id}`;
+        localStorage.setItem(localKey, existingConv.id);
+        setActiveId(existingConv.id);
+        
+        // 拉取该会话的所有历史消息
+        const check = await fetch(`/admin/conversations/${existingConv.id}`);
+        const data = await check.json();
+        setMessages(data.messages || []);
+        return;
+      }
+
+      // 4. 只有当数据库里没有任何匹配的会话时，才上锁并唯一新建一个
+      creatingConvsRef.current[targetTitle] = true;
+      try {
         const create = await fetch('/admin/conversations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: '流式语音通话会话' }),
+          body: JSON.stringify({ title: targetTitle }),
         });
         const created = await create.json();
-        if (created?.conversation?.id) setActiveId(created.conversation.id);
-      } catch {
-        setError('会话初始化失败');
+        if (created?.conversation?.id) {
+          const newId = created.conversation.id;
+          const localKey = `conv_id_${speaker.id}`;
+          localStorage.setItem(localKey, newId);
+          setActiveId(newId);
+          setMessages([]); // 新会话无历史，清空消息
+        }
+      } finally {
+        creatingConvsRef.current[targetTitle] = false;
       }
-    })();
+    } catch (e) {
+      setError('发音人专属会话初始化失败');
+    }
   }, []);
+
+  // --- 当 activeSpeaker 改变时，切换会话 ID ---
+  useEffect(() => {
+    if (activeSpeaker) {
+      initConversationForSpeaker(activeSpeaker);
+    }
+  }, [activeSpeaker, initConversationForSpeaker]);
 
   // --- 加载历史消息 ---
   const loadMessages = useCallback(async () => {
-    if (!activeId) return;
+    if (!activeId) {
+      setMessages([]);
+      return;
+    }
     try {
       const res = await fetch(`/admin/conversations/${activeId}`);
       const data = await res.json();
@@ -166,6 +217,10 @@ export default function StreamingConversationPage({ selectedKey, onJumpToConfig 
       setError('加载聊天历史失败');
     }
   }, [activeId]);
+
+  useEffect(() => {
+    loadSpeakers();
+  }, []);
 
   useEffect(() => {
     loadMessages();
@@ -197,7 +252,7 @@ export default function StreamingConversationPage({ selectedKey, onJumpToConfig 
   };
 
   // --- WebSocket 连接 ---
-  const connectWebSocket = useCallback((speakerId: string) => {
+  const connectWebSocket = useCallback((speakerId: string, currentConvId: string | null) => {
     if (wsRef.current) {
       wsRef.current.close();
     }
@@ -205,8 +260,8 @@ export default function StreamingConversationPage({ selectedKey, onJumpToConfig 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
     let url = `${protocol}//${host}/api/v1/audio/agent/ws?speaker_id=${speakerId}`;
-    if (activeId) {
-      url += `&conversation_id=${activeId}`;
+    if (currentConvId) {
+      url += `&conversation_id=${currentConvId}`;
     }
 
     const ws = new WebSocket(url);
@@ -215,7 +270,7 @@ export default function StreamingConversationPage({ selectedKey, onJumpToConfig 
     ws.onopen = () => {
       setIsConnected(true);
       setError(null);
-      ws.send(JSON.stringify({ type: 'start', speaker_id: speakerId, conversation_id: activeId }));
+      ws.send(JSON.stringify({ type: 'start', speaker_id: speakerId, conversation_id: currentConvId }));
     };
 
     ws.onmessage = async (event) => {
@@ -224,13 +279,6 @@ export default function StreamingConversationPage({ selectedKey, onJumpToConfig 
         switch (data.type) {
           case 'status':
             setPhase(data.status);
-            if (data.status === 'listening') {
-              setCurrentAiResponse('正在倾听...');
-            } else if (data.status === 'thinking') {
-              setCurrentAiResponse('思考中...');
-            } else if (data.status === 'speaking') {
-              setCurrentAiResponse('正在播音...');
-            }
             break;
           case 'asr_result':
             setMessages(prev => [...prev, { role: 'user', content: data.text }]);
@@ -335,7 +383,7 @@ export default function StreamingConversationPage({ selectedKey, onJumpToConfig 
     stopAudioTracks();
 
     // 重新连接并准备 WS
-    connectWebSocket(activeSpeaker.id);
+    connectWebSocket(activeSpeaker.id, activeId);
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -431,6 +479,7 @@ export default function StreamingConversationPage({ selectedKey, onJumpToConfig 
                   key={sp.id}
                   onClick={() => {
                     handleHangup();
+                    setMessages([]); // 立即清空，防止界面残留上一个发音人的对话历史
                     setActiveSpeaker(sp);
                   }}
                   className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-semibold whitespace-nowrap transition-all border ${
@@ -519,9 +568,49 @@ export default function StreamingConversationPage({ selectedKey, onJumpToConfig 
                 <span>{error}</span>
               </div>
             ) : (
-              <p className="text-xs text-[var(--muted-text)] italic tracking-wide max-w-md line-clamp-2">
-                {currentAiResponse || '点击下方绿色电话按钮开始全双工极低延迟通话'}
-              </p>
+              <div className="w-full max-w-lg flex flex-col gap-1.5 py-1">
+                {/* 单行实时字幕滚动区 */}
+                {messages.length > 0 && phase !== 'idle' && (
+                  <div className="w-full px-4 py-1.5 text-center transition-all">
+                    {(() => {
+                      // 智能寻找要显示的消息
+                      // 如果当前 AI 还在思考或倾听，优先展示用户说的最后一条
+                      // 否则（AI在说话），展示 AI 的回复
+                      let msgToShow = messages[messages.length - 1];
+                      if (phase === 'thinking' || phase === 'recognizing' || phase === 'listening') {
+                        const userMsgs = messages.filter(m => m.role === 'user');
+                        if (userMsgs.length > 0) {
+                          msgToShow = userMsgs[userMsgs.length - 1];
+                        }
+                      }
+
+                      const isUser = msgToShow.role === 'user';
+                      return (
+                        <div className="text-xs leading-normal inline-flex items-center gap-1.5 animate-fadeIn max-w-full justify-center">
+                          <span className={`font-bold shrink-0 ${isUser ? 'text-emerald-500' : 'text-blue-500'}`}>
+                            {isUser ? '你:' : `${activeSpeaker?.name || 'AI'}:`}
+                          </span>
+                          <span className="opacity-90 truncate select-text max-w-[280px]">
+                            {msgToShow.content || (
+                              <span className="inline-flex gap-0.5 items-center">
+                                <span className="w-1 h-1 bg-[var(--muted-text)] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                <span className="w-1 h-1 bg-[var(--muted-text)] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                <span className="w-1 h-1 bg-[var(--muted-text)] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+                <p className="text-[11px] text-[var(--muted-text)] italic tracking-wide max-w-md line-clamp-2 mt-1">
+                  {phase === 'listening' ? '正在倾听...' :
+                   phase === 'thinking' ? '思考中...' :
+                   phase === 'speaking' ? '正在播音...' :
+                   currentAiResponse || '点击下方绿色电话按钮开始全双工极低延迟通话'}
+                </p>
+              </div>
             )}
           </div>
 

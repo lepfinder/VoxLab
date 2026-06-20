@@ -50,7 +50,7 @@ export default function AdminDashboard() {
   const [selectedKey, setSelectedKey] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [convMode, setConvMode] = useState<'http' | 'ws'>('http');
+  const [convMode, setConvMode] = useState<'http' | 'ws'>('ws');
 
 
   const API_BASE = '/admin';

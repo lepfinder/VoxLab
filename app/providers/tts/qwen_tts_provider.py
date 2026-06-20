@@ -139,7 +139,7 @@ class QwenTTSProvider(BaseProvider):
                 logger.error(f"[QwenTTS] PyTorch generation failed: {e}", exc_info=True)
                 return None
 
-    def stream_generate(self, text: str, voice: str = None, instruct: str = "A cheerful young female voice with high pitch.", ref_audio: str = None, ref_text: str = None):
+    def stream_generate(self, text: str, voice: str = None, instruct: str = None, ref_audio: str = None, ref_text: str = None):
         try:
             model = model_manager.get_model(self.model_id, self.load)
 

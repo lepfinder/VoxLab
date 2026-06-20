@@ -92,7 +92,7 @@ class Database:
         cursor.execute("SELECT COUNT(*) FROM voices")
         if cursor.fetchone()[0] == 0:
             preset_voices = [
-                ("haruna", "晴奈音色", "治愈系日语女孩，用温暖甜美的声音和中文关心你。", "kokoro", "am_nicole", None, "zh", 1),
+                ("haruna", "晴奈音色", "治愈系日语女孩，用温暖甜美的声音和中文关心你。", "qwen", "serena", None, "zh", 1),
                 ("alex", "Alex音色", "硅谷专业英文男声，提供高强度全英文交流。", "edge", "en-US-GuyNeural", None, "en", 1),
                 ("morpheus", "墨菲斯音色", "沉稳睿智的中文男声，富有哲理与智慧。", "edge", "zh-CN-YunxiNeural", None, "zh", 1),
                 ("xiaoxiao", "晓晓音色", "温柔亲切的中文女声，适用于普通客服与日常交流。", "edge", "zh-CN-XiaoxiaoNeural", None, "zh", 1)
@@ -102,6 +102,10 @@ class Database:
                     INSERT INTO voices (id, name, description, tts_provider, tts_voice, reference_audio, language, is_preset)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, pv)
+            self.conn.commit()
+        else:
+            # 自动修复已有数据库中的拼写错误
+            cursor.execute("UPDATE voices SET tts_voice = 'af_nicole' WHERE tts_voice = 'am_nicole' AND tts_provider = 'kokoro'")
             self.conn.commit()
 
         # 创建发音人配置表
@@ -163,7 +167,7 @@ class Database:
         cursor.execute("UPDATE speakers SET voice_id = 'morpheus' WHERE id = 'morpheus' AND (voice_id IS NULL OR voice_id = '')")
         self.conn.commit()
 
-        # 动态增加缺失的列 (简单的数据库迁移逻辑)
+        # 动态增加 usage_logs 缺失的列
         cursor.execute("PRAGMA table_info(usage_logs)")
         columns = [column[1] for column in cursor.fetchall()]
         new_columns = [
@@ -175,6 +179,20 @@ class Database:
             if col_name not in columns:
                 logger.info(f"Adding column {col_name} to usage_logs table...")
                 cursor.execute(f"ALTER TABLE usage_logs ADD COLUMN {col_name} {col_type}")
+        self.conn.commit()
+
+        # 动态增加 messages 缺失的扩展列（存放思考过程、LLM 输入输出消耗的 token 详细记录）
+        cursor.execute("PRAGMA table_info(messages)")
+        msg_columns = [column[1] for column in cursor.fetchall()]
+        new_msg_columns = [
+            ("thought", "TEXT"),
+            ("prompt_tokens", "INTEGER DEFAULT 0"),
+            ("completion_tokens", "INTEGER DEFAULT 0")
+        ]
+        for col_name, col_type in new_msg_columns:
+            if col_name not in msg_columns:
+                logger.info(f"Adding column {col_name} to messages table...")
+                cursor.execute(f"ALTER TABLE messages ADD COLUMN {col_name} {col_type}")
         
         self.conn.commit()
         
@@ -235,6 +253,12 @@ class Database:
     # --- Conversations ---
     def create_conversation(self, conv_id: str, title: str = "新对话"):
         cursor = self.conn.cursor()
+        # 数据库级查重，100% 杜绝多线程并发创建重名会话的问题
+        cursor.execute("SELECT * FROM conversations WHERE title = ?", (title,))
+        existing = cursor.fetchone()
+        if existing:
+            return dict(existing)
+
         cursor.execute(
             "INSERT INTO conversations (id, title) VALUES (?, ?)",
             (conv_id, title),
@@ -282,11 +306,13 @@ class Database:
         self.conn.commit()
 
     # --- Messages ---
-    def add_message(self, message_id: str, conversation_id: str, role: str, content: str, tokens: int = 0):
+    def add_message(self, message_id: str, conversation_id: str, role: str, content: str, tokens: int = 0,
+                    thought: str = None, prompt_tokens: int = 0, completion_tokens: int = 0):
         cursor = self.conn.cursor()
         cursor.execute(
-            "INSERT INTO messages (id, conversation_id, role, content, tokens) VALUES (?, ?, ?, ?, ?)",
-            (message_id, conversation_id, role, content, tokens),
+            """INSERT INTO messages (id, conversation_id, role, content, tokens, thought, prompt_tokens, completion_tokens) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (message_id, conversation_id, role, content, tokens, thought, prompt_tokens, completion_tokens),
         )
         cursor.execute(
             "UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -301,13 +327,17 @@ class Database:
         row = cursor.fetchone()
         return dict(row) if row else None
 
-    def list_messages(self, conversation_id: str):
+    def list_messages(self, conversation_id: str, limit: int = 50):
+        """默认截取最近 50 条会话记录，防止上下文膨胀导致 Token 溢出或延迟上升"""
         cursor = self.conn.cursor()
+        # 兼容性最好且最高效的做法：先取降序前 limit 条，再在 Python 内存中反转
         cursor.execute(
-            "SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
-            (conversation_id,),
+            "SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT ?",
+            (conversation_id, limit),
         )
-        return [dict(row) for row in cursor.fetchall()]
+        rows = [dict(row) for row in cursor.fetchall()]
+        rows.reverse()
+        return rows
 
     def update_message(self, message_id: str, content: str, tokens: int = None):
         cursor = self.conn.cursor()
@@ -394,8 +424,8 @@ class Database:
                      voice_id: str, llm_config_id: str = None, llm_model: str = None, is_preset: bool = False):
         cursor = self.conn.cursor()
         cursor.execute(
-            """INSERT INTO speakers (id, name, description, avatar, system_prompt, voice_id, llm_config_id, llm_model, is_preset)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """INSERT INTO speakers (id, name, description, avatar, system_prompt, voice_id, llm_config_id, llm_model, is_preset, tts_voice)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET
                  name=excluded.name,
                  description=excluded.description,
@@ -403,8 +433,9 @@ class Database:
                  system_prompt=excluded.system_prompt,
                  voice_id=excluded.voice_id,
                  llm_config_id=excluded.llm_config_id,
-                 llm_model=excluded.llm_model""",
-            (speaker_id, name, description, avatar, system_prompt, voice_id, llm_config_id, llm_model, 1 if is_preset else 0),
+                 llm_model=excluded.llm_model,
+                 tts_voice=excluded.tts_voice""",
+            (speaker_id, name, description, avatar, system_prompt, voice_id, llm_config_id, llm_model, 1 if is_preset else 0, voice_id),
         )
         self.conn.commit()
         return self.get_speaker(speaker_id)

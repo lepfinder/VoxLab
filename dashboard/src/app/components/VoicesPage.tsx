@@ -319,6 +319,7 @@ export default function VoicesPage() {
                     <option value="zh">中文 (zh)</option>
                     <option value="en">英文 (en)</option>
                     <option value="ja">日文 (ja)</option>
+                    <option value="ko">韩文 (ko)</option>
                   </select>
                 </div>
               </div>

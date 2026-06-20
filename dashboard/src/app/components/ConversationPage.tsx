@@ -39,6 +39,18 @@ interface Props {
   onJumpToConfig: () => void;
 }
 
+const stripThink = (text: string): string => {
+  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+  const thinkStart = cleaned.indexOf('<think>');
+  if (thinkStart !== -1) {
+    cleaned = cleaned.substring(0, thinkStart);
+  } else if (cleaned.includes('<think')) {
+    const lastTagIdx = cleaned.lastIndexOf('<think');
+    cleaned = cleaned.substring(0, lastTagIdx);
+  }
+  return cleaned;
+};
+
 export default function ConversationPage({ selectedKey, onJumpToConfig }: Props) {
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
   const [activeSpeaker, setActiveSpeaker] = useState<Speaker | null>(null);
@@ -183,17 +195,18 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
             const delta = chunk?.choices?.[0]?.delta?.content;
             if (delta) {
               fullText += delta;
-              setCurrentAiResponse(fullText);
+              const displayVal = stripThink(fullText);
+              setCurrentAiResponse(displayVal);
               setMessages(prev => {
                 const next = [...prev];
-                next[next.length - 1] = { ...next[next.length - 1], content: fullText };
+                next[next.length - 1] = { ...next[next.length - 1], content: displayVal };
                 return next;
               });
             }
           } catch {}
         }
       }
-      return fullText;
+      return stripThink(fullText);
     } catch (e: any) {
       setError(`思考过程出错: ${e.message}`);
       setCurrentAiResponse('思考发生错误');
