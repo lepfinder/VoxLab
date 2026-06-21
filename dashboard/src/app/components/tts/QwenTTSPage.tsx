@@ -27,17 +27,59 @@ export default function QwenTTSPage({ selectedKey }: QwenTTSPageProps) {
   // Clone states
   const [refText, setRefText] = useState('');
   const [refAudioBase64, setRefAudioBase64] = useState<string | null>(null);
+  const [refAudioUrl, setRefAudioUrl] = useState<string | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
+      
+      // 1. 设置本地试听 URL
+      if (refAudioUrl) URL.revokeObjectURL(refAudioUrl);
+      setRefAudioUrl(URL.createObjectURL(file));
+
+      // 2. 转为 Base64 传递给克隆 API
       const reader = new FileReader();
       reader.onloadend = () => {
         setRefAudioBase64(reader.result as string);
       };
       reader.readAsDataURL(file);
+
+      // 3. 自动发起 ASR 转录
+      setIsTranscribing(true);
+      setRefText('正在自动识别音频文字，请稍候...');
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('model', 'sensevoice');
+
+        const res = await fetch('/api/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${selectedKey}`
+          },
+          body: formData
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setRefText(data.text || '');
+        } else {
+          setRefText('');
+        }
+      } catch (err) {
+        console.error('Auto ASR transcription failed:', err);
+        setRefText('');
+      } finally {
+        setIsTranscribing(false);
+      }
     } else {
       setRefAudioBase64(null);
+      setRefText('');
+      if (refAudioUrl) {
+        URL.revokeObjectURL(refAudioUrl);
+        setRefAudioUrl(null);
+      }
     }
   };
 
@@ -179,6 +221,14 @@ export default function QwenTTSPage({ selectedKey }: QwenTTSPageProps) {
                 onChange={handleFileChange}
                 className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2 text-sm focus:outline-none text-[var(--foreground)]"
               />
+              {refAudioUrl && (
+                <div className="mt-2 p-3 bg-[var(--background)] border border-[var(--card-border)] rounded-xl">
+                  <span className="text-[10px] font-bold text-[var(--muted-text)] uppercase tracking-wider mb-1 block">
+                    参考音频在线试听
+                  </span>
+                  <audio src={refAudioUrl} controls className="w-full h-8" />
+                </div>
+              )}
             </div>
             <div>
               <label className="text-xs font-bold text-[var(--muted-text)] uppercase tracking-wider mb-2 block">
@@ -187,9 +237,10 @@ export default function QwenTTSPage({ selectedKey }: QwenTTSPageProps) {
               <input
                 type="text"
                 value={refText}
+                disabled={isTranscribing}
                 onChange={(e) => setRefText(e.target.value)}
-                placeholder="（选填）参考音频里说话的具体文字内容，这有助于提高克隆的声学稳定性"
-                className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-[var(--foreground)]"
+                placeholder={isTranscribing ? "正在自动通过 SenseVoice 识别参考音频文字，请稍候..." : "（选填）参考音频里说话的具体文字内容，这有助于提高克隆的声学稳定性"}
+                className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-[var(--foreground)] disabled:opacity-60 disabled:cursor-wait"
               />
             </div>
           </div>

@@ -44,6 +44,7 @@ const PAGE_TITLES: Record<string, string> = {
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('overview');
+  const [systemConfigTab, setSystemConfigTab] = useState<'general' | 'tokens' | 'logs' | 'llm' | 'models'>('general');
   const [tokens, setTokens] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [stats, setStats] = useState({ count: 0, tokens: 0 });
@@ -100,7 +101,18 @@ export default function AdminDashboard() {
   const renderContent = () => {
     switch (activeTab) {
       case 'overview':
-        return <Overview stats={stats} logs={logs} isDarkMode={isDarkMode} onTabChange={setActiveTab} />;
+        return (
+          <Overview
+            stats={stats}
+            logs={logs}
+            isDarkMode={isDarkMode}
+            onTabChange={setActiveTab}
+            onJumpToSystemConfig={(tab) => {
+              setSystemConfigTab(tab);
+              setActiveTab('system-config');
+            }}
+          />
+        );
       case 'tokens':
         return <Tokens tokens={tokens} onCreateToken={handleCreateToken} onDeleteToken={handleDeleteToken} />;
       case 'logs':
@@ -163,7 +175,7 @@ export default function AdminDashboard() {
             onDeleteToken={handleDeleteToken}
             isDarkMode={isDarkMode}
             onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
-            defaultTab="general"
+            defaultTab={systemConfigTab}
           />
         );
       case 'asr-sensevoice':

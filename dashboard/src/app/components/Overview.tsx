@@ -30,9 +30,10 @@ interface OverviewProps {
   logs: any[];
   isDarkMode: boolean;
   onTabChange?: (tab: string) => void;
+  onJumpToSystemConfig?: (tab: 'general' | 'tokens' | 'logs' | 'llm' | 'models') => void;
 }
 
-export default function Overview({ stats, logs, isDarkMode, onTabChange }: OverviewProps) {
+export default function Overview({ stats, logs, isDarkMode, onTabChange, onJumpToSystemConfig }: OverviewProps) {
   const features = [
     {
       title: '智能通话间',
@@ -131,6 +132,30 @@ export default function Overview({ stats, logs, isDarkMode, onTabChange }: Overv
           icon={<Clock className="text-violet-500 w-5 h-5" />}
           description="从接收输入到开始产生首帧响应"
         />
+      </div>
+
+      {/* 模型健康与环境自检 Banner */}
+      <div 
+        onClick={() => onJumpToSystemConfig?.('models')}
+        className="group cursor-pointer bg-[var(--card-bg)] border border-[var(--card-border)] hover:border-blue-500/40 hover:shadow-md rounded-2xl p-5 transition-all flex items-center justify-between gap-4"
+      >
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-blue-500/10 text-blue-600 rounded-xl group-hover:scale-110 transition-transform">
+            <Cpu className="w-5 h-5 animate-pulse" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-[var(--foreground)] group-hover:text-blue-500 transition-colors">
+              本地环境与模型缓存检测诊断
+            </h4>
+            <p className="text-[var(--muted-text)] text-xs mt-1">
+              检查您的本地 CPU/GPU/NPU 计算架构适配、网络加速连通性以及 SenseVoice/QwenTTS/Omni/VoxCPM 等主要大模型的缓存下载状态。
+            </p>
+          </div>
+        </div>
+        <button className="shrink-0 px-4 py-2 bg-[var(--background)] hover:bg-[var(--foreground)]/5 border border-[var(--card-border)] rounded-xl text-xs font-semibold flex items-center gap-1 text-blue-500 hover:text-blue-600 transition-all">
+          <span>立即检查</span>
+          <ArrowRight className="w-3.5 h-3.5 transform group-hover:translate-x-0.5 transition-transform" />
+        </button>
       </div>
 
       {/* 趋势图与项目定位左右分栏 */}

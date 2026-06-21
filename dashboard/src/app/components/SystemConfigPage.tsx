@@ -10,13 +10,15 @@ import {
   Sun,
   Moon,
   Check,
+  Server
 } from 'lucide-react';
 
 import Tokens from './Tokens';
 import Logs from './Logs';
 import LLMConfigPage from './LLMConfigPage';
+import ModelsTab from './ModelsTab';
 
-export type SystemConfigTab = 'general' | 'tokens' | 'logs' | 'llm';
+export type SystemConfigTab = 'general' | 'tokens' | 'logs' | 'llm' | 'models';
 
 interface Props {
   tokens: any[];
@@ -32,6 +34,7 @@ const TABS: { id: SystemConfigTab; label: string; icon: any }[] = [
   { id: 'tokens', label: 'Token 管理', icon: Key },
   { id: 'logs', label: '调用日志', icon: History },
   { id: 'llm', label: 'LLM 配置', icon: Bot },
+  { id: 'models', label: '模型管理', icon: Server },
 ];
 
 export default function SystemConfigPage({
@@ -43,6 +46,11 @@ export default function SystemConfigPage({
   defaultTab = 'general',
 }: Props) {
   const [activeTab, setActiveTab] = useState<SystemConfigTab>(defaultTab);
+
+  // 当 defaultTab 发生改变时，同步更新 activeTab 状态，支持外部跳转
+  React.useEffect(() => {
+    setActiveTab(defaultTab);
+  }, [defaultTab]);
 
   return (
     <div>
@@ -84,6 +92,7 @@ export default function SystemConfigPage({
           )}
           {activeTab === 'logs' && <Logs />}
           {activeTab === 'llm' && <LLMConfigPage embedded />}
+          {activeTab === 'models' && <ModelsTab />}
         </div>
       </div>
     </div>

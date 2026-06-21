@@ -275,9 +275,19 @@ async def speech(request_body: SpeechRequest, request: Request):
             )
 
         elif "omni" in model_key:
-            output_path = omni_provider.generate(request_body.input)
+            output_path = omni_provider.generate(
+                request_body.input,
+                instruct=request_body.instruct,
+                ref_audio=temp_ref_path,
+                ref_text=request_body.ref_text
+            )
         elif "vox" in model_key:
-            output_path = voxcpm_provider.generate(request_body.input)
+            output_path = voxcpm_provider.generate(
+                request_body.input,
+                instruct=request_body.instruct,
+                ref_audio=temp_ref_path,
+                ref_text=request_body.ref_text
+            )
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported model: {request_body.model}")
 

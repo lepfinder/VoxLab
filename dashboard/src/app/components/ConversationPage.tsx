@@ -98,32 +98,79 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
     loadSpeakers();
   }, []);
 
-  // --- 自动初始化会话 ---
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/admin/conversations');
-        const data = await res.json();
-        if (data.length > 0) {
-          setActiveId(data[0].id);
+  // 用于防止 React 开发模式或并发引起的多次重复创建会话锁
+  const creatingConvsRef = useRef<Record<string, boolean>>({});
+
+  // --- 智能为 Speaker 查找或创建会话（每个发声人永久唯一） ---
+  const initConversationForSpeaker = useCallback(async (speaker: Speaker) => {
+    try {
+      const targetTitle = `与 ${speaker.name} 的实时通话`;
+
+      if (creatingConvsRef.current[targetTitle]) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const listRes = await fetch('/admin/conversations');
+        const conversations = await listRes.json();
+        const existingConv = conversations.find((c: any) => c.title === targetTitle);
+        if (existingConv) {
+          setActiveId(existingConv.id);
+          const check = await fetch(`/admin/conversations/${existingConv.id}`);
+          const data = await check.json();
+          setMessages(data.messages || []);
           return;
         }
+      }
+
+      const listRes = await fetch('/admin/conversations');
+      const conversations = await listRes.json();
+      const existingConv = conversations.find((c: any) => c.title === targetTitle);
+
+      if (existingConv) {
+        const localKey = `conv_id_${speaker.id}`;
+        localStorage.setItem(localKey, existingConv.id);
+        setActiveId(existingConv.id);
+        
+        const check = await fetch(`/admin/conversations/${existingConv.id}`);
+        const data = await check.json();
+        setMessages(data.messages || []);
+        return;
+      }
+
+      creatingConvsRef.current[targetTitle] = true;
+      try {
         const create = await fetch('/admin/conversations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: '语音通话会话' }),
+          body: JSON.stringify({ title: targetTitle }),
         });
         const created = await create.json();
-        if (created?.conversation?.id) setActiveId(created.conversation.id);
-      } catch {
-        setError('会话初始化失败');
+        if (created?.conversation?.id) {
+          const newId = created.conversation.id;
+          const localKey = `conv_id_${speaker.id}`;
+          localStorage.setItem(localKey, newId);
+          setActiveId(newId);
+          setMessages([]);
+        }
+      } finally {
+        creatingConvsRef.current[targetTitle] = false;
       }
-    })();
+    } catch (e) {
+      setError('发音人专属会话初始化失败');
+    }
   }, []);
+
+  // --- 当 activeSpeaker 改变时，切换会话 ID ---
+  useEffect(() => {
+    if (activeSpeaker) {
+      initConversationForSpeaker(activeSpeaker);
+    }
+  }, [activeSpeaker, initConversationForSpeaker]);
 
   // --- 加载历史消息 ---
   const loadMessages = useCallback(async () => {
-    if (!activeId) return;
+    if (!activeId) {
+      setMessages([]);
+      return;
+    }
     try {
       const res = await fetch(`/admin/conversations/${activeId}`);
       const data = await res.json();
@@ -616,12 +663,11 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
 
       </div>
 
-      {/* 右侧：Live Transcript 聊天瀑布流 */}
-      <div className="w-80 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl p-5 flex flex-col justify-between shadow-sm">
-        <div>
-          <h3 className="font-bold text-sm border-b border-[var(--card-border)] pb-3 text-[var(--muted-text)] tracking-wider uppercase">
-            实时转译历史 (Live Transcript)
-          </h3>
+      {/* 右侧：状态面板与交互式消息历史 */}
+      <div className="w-80 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl p-5 flex flex-col shadow-sm">
+        <div className="flex items-center gap-2 border-b border-[var(--card-border)] pb-3 mb-4">
+          <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+          <h3 className="text-sm font-semibold">对话快照</h3>
         </div>
 
         {/* 对话消息滚动体 */}
