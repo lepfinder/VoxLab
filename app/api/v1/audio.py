@@ -6,6 +6,7 @@ TTS（语音合成）相关 HTTP 接口
 import io
 import os
 import uuid
+import time
 import tempfile
 import struct
 import logging
@@ -36,6 +37,9 @@ voxcpm_provider = VoxCPMProvider()
 async def speech(request_body: SpeechRequest, request: Request):
     from app.core.database import db
     voice_info = db.get_voice(request_body.voice)
+    # 记录原始 voice_id（用于日志），再覆盖为底层参数
+    original_voice_id = request_body.voice
+    original_voice_name = voice_info["name"] if voice_info else ""
     if voice_info:
         request_body.model = voice_info["tts_provider"]
         request_body.voice = voice_info["tts_voice"]
@@ -44,6 +48,52 @@ async def speech(request_body: SpeechRequest, request: Request):
     model_key = request_body.model.lower()
     output_path = None
     temp_ref_path = None
+    # 标记 temp_ref_path 是否为临时文件（base64 解码生成），结束时需清理；
+    # 若直接复用音色记录里的 reference_audio 永久文件，则不应删除。
+    is_temp_ref_temporary = False
+    response = None  # 追踪响应是否成功构建；用于 finally 区分 setup 失败 vs 成功
+
+    # 若音色本身带参考音频（克隆音色）且调用方未传 ref_audio，自动从磁盘加载
+    if voice_info and not request_body.ref_audio and voice_info.get("reference_audio"):
+        ref_path = voice_info["reference_audio"]
+        if os.path.exists(ref_path):
+            temp_ref_path = ref_path
+            is_temp_ref_temporary = False
+            logger.info(f"[TTS] Auto-loaded reference_audio from voice record: {ref_path}")
+
+    # ── TTS 日志追踪变量 ─────────────────────────────────────────────
+    tts_start_time = time.time()
+    tts_status = 200
+    auth_header = request.headers.get("Authorization", "")
+    tts_token = auth_header.split(" ")[1] if auth_header.startswith("Bearer ") else ""
+    is_clone = bool(request_body.ref_audio)
+
+    def _log_tts(duration: float, status: int = 200):
+        try:
+            db.log_tts(
+                token=tts_token,
+                model=request_body.model,
+                endpoint="/api/v1/audio/speech",
+                status_code=status,
+                duration=duration,
+                text=request_body.input,
+                voice_id=original_voice_id,
+                voice_name=original_voice_name,
+                tts_voice=request_body.voice,
+                is_clone=is_clone,
+                response_format=request_body.response_format,
+            )
+        except Exception as log_err:
+            logger.error(f"[TTS] Failed to write log: {log_err}")
+
+    async def log_wrap(gen):
+        """包裹流式生成器：流结束时自动记录真实 duration。"""
+        stream_start = time.time()
+        try:
+            async for chunk in gen:
+                yield chunk
+        finally:
+            _log_tts(time.time() - stream_start, 200)
 
     # 处理 base64 参考音频
     if request_body.ref_audio:
@@ -166,16 +216,18 @@ async def speech(request_body: SpeechRequest, request: Request):
 
                 logger.info(f"[TTS] Finished. Received samples: {total_samples_received}, Sent packets: {total_packets_sent} ({total_packets_sent*60}ms)")
 
-            return StreamingResponse(opus_stream(), media_type="audio/ogg", headers={"X-Model-Name": request_body.model})
+            response = StreamingResponse(log_wrap(opus_stream()), media_type="audio/ogg", headers={"X-Model-Name": request_body.model})
+            return response
 
         # ── 标准格式处理 ──────────────────────────────────────────────────────
         if "edge" in model_key:
             if request_body.response_format == "pcm":
-                return StreamingResponse(
-                    edge_tts_provider.stream_generate(request_body.input, request_body.voice),
+                response = StreamingResponse(
+                    log_wrap(edge_tts_provider.stream_generate(request_body.input, request_body.voice)),
                     media_type="audio/pcm",
                     headers={"X-Model-Name": request_body.model}
                 )
+                return response
             else:
                 async def mp3_stream():
                     import edge_tts
@@ -183,7 +235,8 @@ async def speech(request_body: SpeechRequest, request: Request):
                     async for chunk in c.stream():
                         if chunk["type"] == "audio":
                             yield chunk["data"]
-                return StreamingResponse(mp3_stream(), media_type="audio/mpeg", headers={"X-Model-Name": request_body.model})
+                response = StreamingResponse(log_wrap(mp3_stream()), media_type="audio/mpeg", headers={"X-Model-Name": request_body.model})
+                return response
 
         elif "kokoro" in model_key:
             p = KokoroProvider()
@@ -199,17 +252,18 @@ async def speech(request_body: SpeechRequest, request: Request):
                 mode = "custom"
             p = QwenTTSProvider(mode=mode)
             if request_body.response_format == "pcm":
-                return StreamingResponse(
-                    p.stream_generate(
+                response = StreamingResponse(
+                    log_wrap(p.stream_generate(
                         request_body.input,
                         voice=request_body.voice,
                         instruct=request_body.instruct,
                         ref_audio=temp_ref_path,
                         ref_text=request_body.ref_text
-                    ),
+                    )),
                     media_type="audio/pcm",
                     headers={"X-Model-Name": request_body.model}
                 )
+                return response
             output_path = p.generate(
                 request_body.input,
                 voice=request_body.voice,
@@ -226,18 +280,37 @@ async def speech(request_body: SpeechRequest, request: Request):
             raise HTTPException(status_code=400, detail=f"Unsupported model: {request_body.model}")
 
         if output_path and os.path.exists(output_path):
-            return FileResponse(
+            file_start_time = time.time()
+
+            def _cleanup_and_log():
+                try:
+                    if os.path.exists(output_path):
+                        os.remove(output_path)
+                except Exception:
+                    pass
+                _log_tts(time.time() - file_start_time, 200)
+
+            response = FileResponse(
                 output_path,
                 media_type="audio/wav",
-                background=BackgroundTask(os.remove, output_path),
+                background=BackgroundTask(_cleanup_and_log),
                 headers={"X-Model-Name": request_body.model}
             )
+            return response
         raise HTTPException(status_code=500, detail="Failed to generate audio")
 
+    except HTTPException as e:
+        tts_status = e.status_code
+        raise
     except Exception as e:
+        tts_status = 500
         logger.error(f"[TTS] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
+        # 仅在 setup 阶段失败（response 未创建）时记录日志；
+        # 成功路径由 log_wrap（流式）或 _cleanup_and_log（文件）负责
+        if response is None:
+            _log_tts(time.time() - tts_start_time, tts_status)
         if temp_ref_path and os.path.exists(temp_ref_path):
             try:
                 os.remove(temp_ref_path)

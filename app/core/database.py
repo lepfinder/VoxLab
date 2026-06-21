@@ -26,7 +26,7 @@ class Database:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        # 创建调用日志表
+        # 旧版通用调用日志表（保留兼容历史数据，新数据写入下方三张分类型表）
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS usage_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,6 +35,60 @@ class Database:
                 endpoint TEXT,
                 status_code INTEGER,
                 duration REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        # ASR 调用日志
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS asr_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token TEXT,
+                model TEXT,
+                endpoint TEXT,
+                status_code INTEGER,
+                duration REAL,
+                result TEXT,
+                audio_format TEXT,
+                audio_duration_s REAL,
+                language TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        # TTS 调用日志
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tts_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token TEXT,
+                model TEXT,
+                endpoint TEXT,
+                status_code INTEGER,
+                duration REAL,
+                text TEXT,
+                voice_id TEXT,
+                voice_name TEXT,
+                tts_voice TEXT,
+                is_clone INTEGER DEFAULT 0,
+                response_format TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        # LLM 调用日志
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS llm_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token TEXT,
+                model TEXT,
+                endpoint TEXT,
+                status_code INTEGER,
+                duration REAL,
+                messages TEXT,
+                response TEXT,
+                thinking TEXT,
+                finish_reason TEXT,
+                prompt_tokens INTEGER DEFAULT 0,
+                completion_tokens INTEGER DEFAULT 0,
+                total_tokens INTEGER DEFAULT 0,
+                is_stream INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -82,10 +136,23 @@ class Database:
                 tts_voice TEXT NOT NULL,
                 reference_audio TEXT,
                 language TEXT DEFAULT 'zh',
+                preview_text TEXT,
                 is_preset INTEGER DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        self.conn.commit()
+
+        # 动态增加 voices 缺失的列 (针对旧数据库的迁移逻辑)
+        cursor.execute("PRAGMA table_info(voices)")
+        v_columns = [column[1] for column in cursor.fetchall()]
+        new_v_columns = [
+            ("preview_text", "TEXT"),
+        ]
+        for col_name, col_type in new_v_columns:
+            if col_name not in v_columns:
+                logger.info(f"Adding column {col_name} to voices table...")
+                cursor.execute(f"ALTER TABLE voices ADD COLUMN {col_name} {col_type}")
         self.conn.commit()
 
         # 检查并初始化预置音色
@@ -244,11 +311,71 @@ class Database:
         return [dict(row) for row in cursor.fetchall()]
 
     def get_stats(self):
-        """获取简单的统计信息"""
+        """获取简单的统计信息（聚合三张分类型日志表）"""
         cursor = self.conn.cursor()
-        cursor.execute("SELECT COUNT(*) as count, SUM(total_tokens) as tokens FROM usage_logs")
+        cursor.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM asr_logs) +
+                (SELECT COUNT(*) FROM tts_logs) +
+                (SELECT COUNT(*) FROM llm_logs) as count,
+                (SELECT COALESCE(SUM(total_tokens), 0) FROM llm_logs) as tokens
+        """)
         row = cursor.fetchone()
         return dict(row)
+
+    # --- Typed logs ---
+    def log_asr(self, token: str, model: str, endpoint: str, status_code: int, duration: float,
+                result: str = "", audio_format: str = "", audio_duration_s: float = 0, language: str = ""):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO asr_logs (token, model, endpoint, status_code, duration,
+                                  result, audio_format, audio_duration_s, language)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (token, model, endpoint, status_code, duration,
+              result, audio_format, audio_duration_s, language))
+        self.conn.commit()
+
+    def log_tts(self, token: str, model: str, endpoint: str, status_code: int, duration: float,
+                text: str = "", voice_id: str = "", voice_name: str = "", tts_voice: str = "",
+                is_clone: bool = False, response_format: str = ""):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO tts_logs (token, model, endpoint, status_code, duration,
+                                  text, voice_id, voice_name, tts_voice, is_clone, response_format)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (token, model, endpoint, status_code, duration,
+              text, voice_id, voice_name, tts_voice, 1 if is_clone else 0, response_format))
+        self.conn.commit()
+
+    def log_llm(self, token: str, model: str, endpoint: str, status_code: int, duration: float,
+                messages: str = "", response: str = "", thinking: str = "", finish_reason: str = "",
+                prompt_tokens: int = 0, completion_tokens: int = 0, total_tokens: int = 0,
+                is_stream: bool = False):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO llm_logs (token, model, endpoint, status_code, duration,
+                                  messages, response, thinking, finish_reason,
+                                  prompt_tokens, completion_tokens, total_tokens, is_stream)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (token, model, endpoint, status_code, duration,
+              messages, response, thinking, finish_reason,
+              prompt_tokens, completion_tokens, total_tokens, 1 if is_stream else 0))
+        self.conn.commit()
+
+    def get_asr_logs(self, limit: int = 100):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM asr_logs ORDER BY created_at DESC LIMIT ?", (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_tts_logs(self, limit: int = 100):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM tts_logs ORDER BY created_at DESC LIMIT ?", (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_llm_logs(self, limit: int = 100):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM llm_logs ORDER BY created_at DESC LIMIT ?", (limit,))
+        return [dict(row) for row in cursor.fetchall()]
 
     # --- Conversations ---
     def create_conversation(self, conv_id: str, title: str = "新对话"):
@@ -464,30 +591,29 @@ class Database:
         return dict(row) if row else None
 
     def save_custom_voice(self, voice_id: str, name: str, description: str, tts_provider: str, tts_voice: str,
-                          reference_audio: str = None, language: str = "zh") -> dict:
+                          reference_audio: str = None, language: str = "zh", preview_text: str = None) -> dict:
         cursor = self.conn.cursor()
         cursor.execute(
-            """INSERT INTO voices (id, name, description, tts_provider, tts_voice, reference_audio, language, is_preset)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+            """INSERT INTO voices (id, name, description, tts_provider, tts_voice, reference_audio, language, preview_text, is_preset)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
                ON CONFLICT(id) DO UPDATE SET
                  name=excluded.name,
                  description=excluded.description,
                  tts_provider=excluded.tts_provider,
                  tts_voice=excluded.tts_voice,
                  reference_audio=excluded.reference_audio,
-                 language=excluded.language""",
-            (voice_id, name, description, tts_provider, tts_voice, reference_audio, language)
+                 language=excluded.language,
+                 preview_text=excluded.preview_text""",
+            (voice_id, name, description, tts_provider, tts_voice, reference_audio, language, preview_text)
         )
         self.conn.commit()
         return self.get_voice(voice_id)
 
     def delete_voice(self, voice_id: str) -> bool:
         cursor = self.conn.cursor()
-        cursor.execute("SELECT is_preset, reference_audio FROM voices WHERE id = ?", (voice_id,))
+        cursor.execute("SELECT reference_audio FROM voices WHERE id = ?", (voice_id,))
         row = cursor.fetchone()
         if not row:
-            return False
-        if row["is_preset"] == 1:
             return False
         if row["reference_audio"]:
             import os

@@ -100,11 +100,11 @@ export default function AdminDashboard() {
   const renderContent = () => {
     switch (activeTab) {
       case 'overview':
-        return <Overview stats={stats} logs={logs} isDarkMode={isDarkMode} />;
+        return <Overview stats={stats} logs={logs} isDarkMode={isDarkMode} onTabChange={setActiveTab} />;
       case 'tokens':
         return <Tokens tokens={tokens} onCreateToken={handleCreateToken} onDeleteToken={handleDeleteToken} />;
       case 'logs':
-        return <Logs logs={logs} />;
+        return <Logs />;
       case 'vad':
         return <VadPage selectedKey={selectedKey} />;
       case 'tutorials':
@@ -161,7 +161,6 @@ export default function AdminDashboard() {
             tokens={tokens}
             onCreateToken={handleCreateToken}
             onDeleteToken={handleDeleteToken}
-            logs={logs}
             isDarkMode={isDarkMode}
             onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
             defaultTab="general"
@@ -184,7 +183,7 @@ export default function AdminDashboard() {
       case 'tts-edge':
         return <EdgePage selectedKey={selectedKey} />;
       default:
-        return <Overview stats={stats} logs={logs} isDarkMode={isDarkMode} />;
+        return <Overview stats={stats} logs={logs} isDarkMode={isDarkMode} onTabChange={setActiveTab} />;
     }
   };
 

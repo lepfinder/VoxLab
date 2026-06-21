@@ -207,15 +207,16 @@ async def save_custom_voice(
     tts_provider: str = Form(...),
     tts_voice: str = Form(...),
     language: Optional[str] = Form("zh"),
+    preview_text: Optional[str] = Form(""),
     file: Optional[UploadFile] = File(None)
 ):
     import os
     voice_id = id or f"custom_{uuid.uuid4().hex[:8]}"
-    
+
     # Check if voice already exists to preserve existing reference audio path
     existing = db.get_voice(voice_id)
     reference_audio_path = existing.get("reference_audio") if existing else None
-    
+
     if file:
         # Delete old file if it exists and is different
         if reference_audio_path and os.path.exists(reference_audio_path):
@@ -230,7 +231,7 @@ async def save_custom_voice(
         with open(reference_audio_path, "wb") as f:
             content = await file.read()
             f.write(content)
-            
+
     saved = db.save_custom_voice(
         voice_id=voice_id,
         name=name,
@@ -238,7 +239,8 @@ async def save_custom_voice(
         tts_provider=tts_provider,
         tts_voice=tts_voice,
         reference_audio=reference_audio_path,
-        language=language
+        language=language,
+        preview_text=preview_text or None
     )
     return saved
 
@@ -247,6 +249,6 @@ async def save_custom_voice(
 async def delete_voice(voice_id: str):
     success = db.delete_voice(voice_id)
     if not success:
-        raise HTTPException(status_code=400, detail="预置音色不能被删除或音色不存在")
+        raise HTTPException(status_code=400, detail="音色不存在")
     return {"ok": True}
 

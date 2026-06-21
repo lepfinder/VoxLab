@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Edit2, ShieldAlert, Sparkles, Volume2, Globe, Music, Layers } from 'lucide-react';
+import { Plus, Trash2, Edit2, ShieldAlert, Sparkles, Volume2, Globe, Music, Layers, AlertTriangle } from 'lucide-react';
 
 interface Voice {
   id: string;
@@ -19,6 +19,8 @@ export default function VoicesPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingVoice, setEditingVoice] = useState<Voice | null>(null);
+  const [deletingVoice, setDeletingVoice] = useState<Voice | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Form states
   const [name, setName] = useState('');
@@ -121,14 +123,19 @@ export default function VoicesPage() {
     }
   };
 
-  const handleDeleteVoice = async (id: string) => {
-    if (!confirm('确定要删除这个音色吗？相关的发音人设置可能会失效。')) return;
+  const handleClickDelete = (v: Voice) => {
+    setDeletingVoice(v);
+  };
 
+  const confirmDelete = async () => {
+    if (!deletingVoice) return;
+    setDeleting(true);
     try {
-      const res = await fetch(`/admin/voices/${id}`, {
+      const res = await fetch(`/admin/voices/${deletingVoice.id}`, {
         method: 'DELETE',
       });
       if (res.ok) {
+        setDeletingVoice(null);
         fetchVoices();
       } else {
         const errorData = await res.json();
@@ -137,6 +144,8 @@ export default function VoicesPage() {
     } catch (e) {
       console.error(e);
       alert('删除异常');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -209,15 +218,13 @@ export default function VoicesPage() {
                   <Edit2 size={13} />
                   编辑
                 </button>
-                {v.is_preset !== 1 && (
-                  <button
-                    onClick={() => handleDeleteVoice(v.id)}
-                    className="px-3 py-2 text-red-500 hover:bg-red-500/10 border border-transparent rounded-xl transition-all active:scale-95 flex items-center justify-center"
-                    title="删除"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                )}
+                <button
+                  onClick={() => handleClickDelete(v)}
+                  className="flex-1 py-2 bg-[var(--background)] hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-500 border border-[var(--card-border)] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95 text-[var(--muted-text)]"
+                >
+                  <Trash2 size={13} />
+                  删除
+                </button>
               </div>
             </div>
           ))}
@@ -377,6 +384,55 @@ export default function VoicesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingVoice && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl w-full max-w-md p-6 shadow-2xl animate-scale-up">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
+                <AlertTriangle className="text-red-500" size={20} />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold mb-1 text-red-500">确认删除音色</h2>
+                <p className="text-sm text-[var(--muted-text)] leading-relaxed">
+                  确定要删除音色「<span className="font-semibold text-[var(--foreground)]">{deletingVoice.name}</span>」吗？
+                </p>
+                <p className="text-xs text-[var(--muted-text)] mt-2 flex items-start gap-1">
+                  <ShieldAlert size={12} className="mt-0.5 shrink-0 text-amber-500" />
+                  删除后无法恢复，已关联该音色的发音人配置可能会失效。
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end pt-2 border-t border-[var(--card-border)]">
+              <button
+                onClick={() => setDeletingVoice(null)}
+                disabled={deleting}
+                className="px-5 py-2 bg-[var(--background)] hover:bg-[var(--card-border)] border border-[var(--card-border)] rounded-xl text-sm font-semibold transition-all active:scale-95"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="px-5 py-2 bg-red-500 hover:bg-red-400 text-white rounded-xl text-sm font-semibold transition-all active:scale-95 shadow-lg shadow-red-500/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {deleting ? (
+                  <>
+                    <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    删除中...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={14} />
+                    确认删除
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

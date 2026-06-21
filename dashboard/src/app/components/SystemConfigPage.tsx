@@ -22,7 +22,6 @@ interface Props {
   tokens: any[];
   onCreateToken: (name: string) => void;
   onDeleteToken: (token: string) => void;
-  logs: any[];
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
   defaultTab?: SystemConfigTab;
@@ -39,7 +38,6 @@ export default function SystemConfigPage({
   tokens,
   onCreateToken,
   onDeleteToken,
-  logs,
   isDarkMode,
   onToggleDarkMode,
   defaultTab = 'general',
@@ -84,7 +82,7 @@ export default function SystemConfigPage({
           {activeTab === 'tokens' && (
             <Tokens tokens={tokens} onCreateToken={onCreateToken} onDeleteToken={onDeleteToken} />
           )}
-          {activeTab === 'logs' && <Logs logs={logs} />}
+          {activeTab === 'logs' && <Logs />}
           {activeTab === 'llm' && <LLMConfigPage embedded />}
         </div>
       </div>

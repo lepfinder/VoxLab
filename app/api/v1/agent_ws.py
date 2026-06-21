@@ -5,6 +5,7 @@ WebSocket Agent 实时语音对话接口
 """
 import os
 import uuid
+import time
 import base64
 import re
 import json
@@ -145,13 +146,20 @@ async def agent_websocket(websocket: WebSocket):
         """将一句话通过对应 TTS 引擎合成并分块推送给客户端"""
         nonlocal voice_info
 
+        tts_start_time = time.time()
+        tts_status = 200
+        should_log = True
+
         cleaned_text = clean_tts_text(text_to_synthesize)
         if not is_valid_tts_text(cleaned_text):
+            should_log = False
             logger.info(f"[WS Agent] Skip synthesis for invalid/empty sentence: {text_to_synthesize!r} (cleaned: {cleaned_text!r})")
             return
 
         tts_provider_name = voice_info["tts_provider"].lower() if voice_info else "edge"
         tts_voice = voice_info["tts_voice"] if voice_info else "zh-CN-XiaoxiaoNeural"
+        voice_id = voice_info["id"] if voice_info else ""
+        voice_name = voice_info["name"] if voice_info else ""
 
         logger.info(f"[WS Agent] Synthesis sentence: {cleaned_text} (original: {text_to_synthesize})")
         try:
@@ -204,11 +212,34 @@ async def agent_websocket(websocket: WebSocket):
                             "audio": base64.b64encode(pcm_data[i:i + 4096]).decode("utf-8")
                         })
         except Exception as e:
+            tts_status = 500
             logger.error(f"[WS Agent] TTS Error: {e}")
+        finally:
+            if should_log:
+                try:
+                    db.log_tts(
+                        token="",
+                        model=tts_provider_name,
+                        endpoint="/api/v1/audio/agent/ws",
+                        status_code=tts_status,
+                        duration=time.time() - tts_start_time,
+                        text=cleaned_text,
+                        voice_id=voice_id,
+                        voice_name=voice_name,
+                        tts_voice=tts_voice,
+                        is_clone=False,
+                        response_format="pcm_chunk",
+                    )
+                except Exception as log_err:
+                    logger.error(f"[WS Agent] TTS log failed: {log_err}")
 
     async def process_response(user_text: str):
         """LLM 流式生成并逐句 TTS 合成：过滤 <think> 思考段，不发送给 TTS 也不显示给用户"""
         nonlocal messages
+        llm_start_time = None
+        llm_messages_json = None
+        llm_model = None
+        llm_status = 200
         try:
             # 1. 更新数据库 & 消息列表
             if conversation_id:
@@ -250,10 +281,17 @@ async def agent_websocket(websocket: WebSocket):
             await send_status("thinking")
 
             # 3. 流式 LLM + 逐句 TTS
+            llm_start_time = time.time()
+            # 捕获 LLM 输入 messages（用于日志，不含本轮 assistant 响应）
+            llm_messages_json = json.dumps(
+                [{"role": m["role"], "content": m["content"]} for m in messages],
+                ensure_ascii=False
+            )
             sentence_buffer = ""
             full_assistant_response = []
             full_thought_response = []
             prompt_tokens, completion_tokens = 0, 0
+            finish_reason = ""
 
             # ThinkFilter 过滤思考过程，过滤后的内容才发送给前端和 TTS
             think_filter = ThinkFilter()
@@ -268,6 +306,11 @@ async def agent_websocket(websocket: WebSocket):
                 if not choices:
                     continue
                 delta = choices[0].get("delta", {}) or {}
+
+                # 记录 finish_reason（最后一个 chunk 会有）
+                fr = choices[0].get("finish_reason")
+                if fr:
+                    finish_reason = fr
 
                 # 优先过滤大模型原生的思维链/思考字段并记录
                 reasoning = delta.get("reasoning_content") or delta.get("reasoning")
@@ -341,6 +384,25 @@ async def agent_websocket(websocket: WebSocket):
                 )
             messages.append({"role": "assistant", "content": assistant_text})
 
+            # 记录 LLM 日志
+            try:
+                db.log_llm(
+                    token="",
+                    model=llm_model,
+                    endpoint="/api/v1/audio/agent/ws",
+                    status_code=200,
+                    duration=time.time() - llm_start_time,
+                    messages=llm_messages_json,
+                    response=assistant_text,
+                    thinking=thought_text or "",
+                    finish_reason=finish_reason or "stop",
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=total_tokens,
+                )
+            except Exception as log_err:
+                logger.error(f"[WS Agent] LLM log failed: {log_err}")
+
             await websocket.send_json({"type": "llm_end"})
             await websocket.send_json({"type": "audio_end"})
             await send_status("listening")
@@ -349,7 +411,24 @@ async def agent_websocket(websocket: WebSocket):
             logger.info("[WS Agent] response generation cancelled")
             raise
         except Exception as e:
+            llm_status = 500
             logger.error(f"[WS Agent] process_response error: {e}")
+            # 错误路径也记录 LLM 日志（仅当已经进入 LLM 阶段）
+            if llm_start_time is not None:
+                try:
+                    db.log_llm(
+                        token="",
+                        model=llm_model or "unknown",
+                        endpoint="/api/v1/audio/agent/ws",
+                        status_code=llm_status,
+                        duration=time.time() - llm_start_time,
+                        messages=llm_messages_json or "[]",
+                        response="",
+                        thinking="",
+                        finish_reason="error",
+                    )
+                except Exception as log_err:
+                    logger.error(f"[WS Agent] LLM error log failed: {log_err}")
             await websocket.send_json({"type": "error", "message": str(e)})
             await send_status("listening")
 
@@ -397,6 +476,8 @@ async def agent_websocket(websocket: WebSocket):
 
                                 # ASR 识别
                                 asr_provider_name = "sensevoice"
+                                asr_start_time = time.time()
+                                asr_status = 200
                                 text = ""
                                 try:
                                     if "sensevoice" in asr_provider_name:
@@ -415,7 +496,23 @@ async def agent_websocket(websocket: WebSocket):
                                             if os.path.exists(tmp_path):
                                                 os.remove(tmp_path)
                                 except Exception as e:
+                                    asr_status = 500
                                     logger.error(f"[WS Agent] ASR error: {e}")
+
+                                # 记录 ASR 日志
+                                try:
+                                    db.log_asr(
+                                        token="",
+                                        model=asr_provider_name,
+                                        endpoint="/api/v1/audio/agent/ws",
+                                        status_code=asr_status,
+                                        duration=time.time() - asr_start_time,
+                                        result=text,
+                                        audio_format="pcm",
+                                        audio_duration_s=float(len(speech_audio)) / 16000.0,
+                                    )
+                                except Exception as log_err:
+                                    logger.error(f"[WS Agent] ASR log failed: {log_err}")
 
                                 logger.info(f"[WS Agent] ASR text: {text}")
                                 if len(text) <= 1 or text in ["。", "？", "！", ".", "?", "!"]:

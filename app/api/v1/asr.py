@@ -39,34 +39,45 @@ async def transcribe(
     file: UploadFile = File(...),
     model: str = Form("sensevoice")
 ):
+    from app.core.database import db
     request.state.model_name = model
     logger.info(f"[ASR] Request received. File: {file.filename}, Content-Type: {file.content_type}, Model: {model}")
 
+    start_time = time.time()
     temp_path = None
+    audio_format = os.path.splitext(file.filename)[1] if file.filename else ".webm"
+    audio_duration_s = 0.0
+    text = ""
+    status_code = 200
+
+    # 提取 token
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.split(" ")[1] if auth_header.startswith("Bearer ") else ""
+
     try:
         # 保存到临时文件
-        suffix = os.path.splitext(file.filename)[1] if file.filename else ".webm"
+        suffix = audio_format or ".webm"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             content = await file.read()
             tmp.write(content)
             temp_path = tmp.name
 
+        import librosa
+        data, sr = librosa.load(temp_path, sr=16000)
+        audio_duration_s = float(len(data)) / sr
+
         model_key = model.lower()
-        text = ""
 
         if "sensevoice" in model_key:
-            import librosa
-            data, sr = librosa.load(temp_path, sr=16000)
             result = sensevoice_provider.transcribe(data)
             text = result.get("text", "")
         elif "vosk" in model_key:
-            import librosa
-            data, sr = librosa.load(temp_path, sr=16000)
             pcm_bytes = (np.clip(data, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
             text = vosk_provider.transcribe(pcm_bytes)
         elif "qwen" in model_key:
             text = qwen_asr_provider.transcribe(temp_path)
         else:
+            status_code = 400
             raise HTTPException(status_code=400, detail=f"Unsupported ASR model: {model}")
 
         logger.info(f"[ASR] Transcription result: {text}")
@@ -76,12 +87,30 @@ async def transcribe(
             headers={"X-Model-Name": model},
         )
 
-    except HTTPException:
+    except HTTPException as e:
+        status_code = e.status_code
         raise
     except Exception as e:
+        status_code = 500
         logger.error(f"[ASR] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
+        # 记录 ASR 日志
+        duration = time.time() - start_time
+        try:
+            db.log_asr(
+                token=token,
+                model=model,
+                endpoint="/api/v1/audio/transcriptions",
+                status_code=status_code,
+                duration=duration,
+                result=text,
+                audio_format=audio_format,
+                audio_duration_s=audio_duration_s,
+            )
+        except Exception as log_err:
+            logger.error(f"[ASR] Failed to write log: {log_err}")
+
         if temp_path and os.path.exists(temp_path):
             try:
                 os.remove(temp_path)

@@ -64,7 +64,23 @@ async def delete_token(token: str):
 
 @router.get("/logs")
 async def list_logs(limit: int = 100):
+    # 旧版通用日志，保留兼容；新数据已写入 asr_logs / tts_logs / llm_logs
     return db.get_usage_logs(limit)
+
+
+@router.get("/logs/asr")
+async def list_asr_logs(limit: int = 100):
+    return db.get_asr_logs(limit)
+
+
+@router.get("/logs/tts")
+async def list_tts_logs(limit: int = 100):
+    return db.get_tts_logs(limit)
+
+
+@router.get("/logs/llm")
+async def list_llm_logs(limit: int = 100):
+    return db.get_llm_logs(limit)
 
 
 # API 文档目录
