@@ -105,7 +105,7 @@ export default function TutorialsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* 左侧树状目录导航 */}
-        <div className="lg:col-span-1 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-4 shadow-sm h-[calc(100vh-220px)] overflow-y-auto custom-scrollbar">
+        <div className="lg:col-span-1 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-4 shadow-sm h-[calc(100vh-220px)] overflow-y-auto custom-scrollbar lg:sticky lg:top-6">
           <div className="flex items-center gap-2 font-bold text-sm text-[var(--muted-text)] border-b border-[var(--card-border)] pb-3 mb-4 px-2">
             <BookMarked size={16} className="text-blue-500" />
             <span>教程目录索引</span>
@@ -170,14 +170,14 @@ export default function TutorialsPage() {
         </div>
 
         {/* 右侧教程内容阅读器 */}
-        <div className="lg:col-span-3 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl shadow-sm h-[calc(100vh-220px)] flex flex-col overflow-hidden">
+        <div className="lg:col-span-3 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl shadow-sm min-h-[500px]">
           {loadingContent ? (
-            <div className="flex-1 flex flex-col items-center justify-center gap-3 text-sm text-[var(--muted-text)]">
+            <div className="flex items-center justify-center min-h-[500px] gap-3 text-sm text-[var(--muted-text)]">
               <RefreshCw size={24} className="animate-spin text-blue-500" />
               <span>正在加载小节内容...</span>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto p-8 pb-20 custom-scrollbar">
+            <div className="p-8 pb-20">
               <article 
                 className="md-content"
                 dangerouslySetInnerHTML={{ __html: md.render(content || '') }}
