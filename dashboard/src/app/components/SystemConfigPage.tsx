@@ -31,7 +31,7 @@ interface Props {
 
 const TABS: { id: SystemConfigTab; label: string; icon: any }[] = [
   { id: 'general', label: '通用', icon: Palette },
-  { id: 'tokens', label: 'Token 管理', icon: Key },
+  { id: 'tokens', label: 'API-Token 管理', icon: Key },
   { id: 'logs', label: '调用日志', icon: History },
   { id: 'llm', label: 'LLM 配置', icon: Bot },
   { id: 'models', label: '模型管理', icon: Server },
@@ -69,11 +69,10 @@ export default function SystemConfigPage({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all ${
-                  activeTab === tab.id
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all ${activeTab === tab.id
                     ? 'bg-blue-600/10 text-blue-600 dark:text-blue-400 font-medium'
                     : 'text-[var(--muted-text)] hover:text-[var(--foreground)] hover:bg-[var(--foreground)]/5'
-                }`}
+                  }`}
               >
                 <tab.icon size={16} />
                 {tab.label}
@@ -172,11 +171,10 @@ function ThemeCard({
   return (
     <button
       onClick={onClick}
-      className={`relative text-left rounded-2xl border-2 p-4 transition-all ${
-        active
+      className={`relative text-left rounded-2xl border-2 p-4 transition-all ${active
           ? 'border-blue-600 shadow-lg shadow-blue-500/20'
           : 'border-[var(--card-border)] hover:border-blue-500/40'
-      }`}
+        }`}
     >
       {active && (
         <span className="absolute top-3 right-3 w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center">

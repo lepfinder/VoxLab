@@ -479,7 +479,7 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
 
       
       {/* 左侧：发音人呼叫主控制区 */}
-      <div className="flex-1 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl p-6 flex flex-col justify-between relative shadow-sm">
+      <div className="flex-1 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl p-6 flex flex-col justify-between relative shadow-sm min-h-0 overflow-hidden">
         
         {/* 顶部发音人横向栏 */}
         <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-4">
@@ -515,7 +515,7 @@ export default function ConversationPage({ selectedKey, onJumpToConfig }: Props)
         </div>
 
         {/* 中间：发光脉冲头像区 */}
-        <div className="flex-1 flex flex-col items-center justify-center py-8">
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-center py-4 my-auto">
           <div className="relative mb-8">
             
             {/* 炫酷的环形声波高亮扩散动画 */}
