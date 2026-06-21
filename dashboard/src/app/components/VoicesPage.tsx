@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Edit2, ShieldAlert, Sparkles, Volume2, Globe, Music, Layers, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Edit2, ShieldAlert, Sparkles, Globe, Music, Layers, AlertTriangle, FileText } from 'lucide-react';
+import VoicePreviewButton, { buildDefaultText } from './VoicePreviewButton';
 
 interface Voice {
   id: string;
@@ -11,6 +12,7 @@ interface Voice {
   tts_voice: string;
   reference_audio?: string;
   language: string;
+  preview_text?: string | null;
   is_preset: number;
 }
 
@@ -30,6 +32,7 @@ export default function VoicesPage() {
   const [ttsVoiceParam, setTtsVoiceParam] = useState('');
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [language, setLanguage] = useState('zh');
+  const [previewText, setPreviewText] = useState('');
 
   const fetchVoices = async () => {
     try {
@@ -56,6 +59,7 @@ export default function VoicesPage() {
     setTtsVoiceParam('');
     setReferenceFile(null);
     setLanguage('zh');
+    setPreviewText('');
     setShowModal(true);
   };
 
@@ -64,13 +68,14 @@ export default function VoicesPage() {
     setName(v.name);
     setDescription(v.description || '');
     setTtsProvider(v.tts_provider);
-    
+
     // Check if it's cloned voice
     const isCloned = v.tts_voice === 'clone' || !!v.reference_audio;
     setVoiceType(isCloned ? 'clone' : 'standard');
     setTtsVoiceParam(isCloned ? '' : v.tts_voice);
     setReferenceFile(null);
     setLanguage(v.language || 'zh');
+    setPreviewText(v.preview_text || '');
     setShowModal(true);
   };
 
@@ -100,6 +105,7 @@ export default function VoicesPage() {
     formData.append('tts_provider', ttsProvider);
     formData.append('tts_voice', voiceType === 'clone' ? 'clone' : ttsVoiceParam);
     formData.append('language', language);
+    formData.append('preview_text', previewText.trim());
     if (referenceFile) {
       formData.append('file', referenceFile);
     }
@@ -178,11 +184,12 @@ export default function VoicesPage() {
             >
               <div>
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg bg-blue-500/10 border border-blue-500/20 text-blue-600">
-                    <Volume2 size={22} />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg">{v.name}</h3>
+                  <VoicePreviewButton
+                    voice={v}
+                    defaultText={buildDefaultText(v.language || 'zh', v.name)}
+                  />
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-lg truncate">{v.name}</h3>
                     <p className="text-xs text-[var(--muted-text)] line-clamp-1">{v.description || '暂无描述'}</p>
                   </div>
                 </div>
@@ -207,6 +214,12 @@ export default function VoicesPage() {
                       </span>
                     )}
                   </div>
+                  {(v.preview_text || '').trim() && (
+                    <div className="flex items-start gap-1 text-[10px] text-[var(--muted-text)] bg-amber-500/5 text-amber-700 dark:text-amber-400 px-2 py-1.5 rounded mt-2 font-sans">
+                      <FileText size={11} className="opacity-70 mt-0.5 shrink-0" />
+                      <span className="line-clamp-2">试听文本: {v.preview_text}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -294,6 +307,23 @@ export default function VoicesPage() {
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider flex items-center gap-1.5">
+                  <FileText size={12} />
+                  试听文本 <span className="text-[9px] font-normal normal-case tracking-normal text-[var(--muted-text)]">（选填，留空则按语言使用默认文案）</span>
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder={buildDefaultText(language, name || 'XXX')}
+                  value={previewText}
+                  onChange={(e) => setPreviewText(e.target.value)}
+                  className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+                />
+                <p className="text-[10px] text-[var(--muted-text)] mt-1.5">
+                  点击音色卡片的喇叭图标即可试听，将以此处文本生成语音
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

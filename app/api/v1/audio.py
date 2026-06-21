@@ -66,7 +66,7 @@ async def speech(request_body: SpeechRequest, request: Request):
     tts_status = 200
     auth_header = request.headers.get("Authorization", "")
     tts_token = auth_header.split(" ")[1] if auth_header.startswith("Bearer ") else ""
-    is_clone = bool(request_body.ref_audio)
+    is_clone = bool(request_body.ref_audio) or bool(temp_ref_path and not is_temp_ref_temporary)
 
     def _log_tts(duration: float, status: int = 200):
         try:
@@ -106,6 +106,7 @@ async def speech(request_body: SpeechRequest, request: Request):
             with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
                 tmp.write(decoded_bytes)
                 temp_ref_path = tmp.name
+            is_temp_ref_temporary = True
             logger.info(f"[TTS] Decoded base64 ref_audio, saved to: {temp_ref_path}")
         except Exception as e:
             logger.error(f"[TTS] Failed to decode base64 ref_audio: {e}")
@@ -311,7 +312,7 @@ async def speech(request_body: SpeechRequest, request: Request):
         # 成功路径由 log_wrap（流式）或 _cleanup_and_log（文件）负责
         if response is None:
             _log_tts(time.time() - tts_start_time, tts_status)
-        if temp_ref_path and os.path.exists(temp_ref_path):
+        if is_temp_ref_temporary and temp_ref_path and os.path.exists(temp_ref_path):
             try:
                 os.remove(temp_ref_path)
             except:
