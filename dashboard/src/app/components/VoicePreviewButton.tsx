@@ -38,6 +38,8 @@ export default function VoicePreviewButton({ voice, defaultText }: Props) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'playing'>('idle');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const blobUrlRef = useRef<string | null>(null);
+  /** 记录当前缓存对应的试听文本，文本变了就重新生成 */
+  const cachedTextRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // 监听其他按钮的播放事件 → 如果自己正在播放就停止
@@ -71,9 +73,24 @@ export default function VoicePreviewButton({ voice, defaultText }: Props) {
   const stopPlayback = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current = null;
+      // 保留 audio 元素以便下次复用，只暂停不销毁
     }
     setStatus('idle');
+  }, []);
+
+  /** 播放当前缓存的 audio（从头开始），没有缓存则返回 false */
+  const playCached = useCallback(async (): Promise<boolean> => {
+    const audio = audioRef.current;
+    if (!audio) return false;
+    try {
+      audio.currentTime = 0;
+      await audio.play();
+      setStatus('playing');
+      return true;
+    } catch {
+      // 播放失败（如 autoplay 限制），让调用方重新生成
+      return false;
+    }
   }, []);
 
   const handleToggle = async () => {
@@ -89,20 +106,29 @@ export default function VoicePreviewButton({ voice, defaultText }: Props) {
     }
 
     const previewText = (voice.preview_text || '').trim() || defaultText;
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setStatus('loading');
 
     // 通知其他试听按钮停止
     window.dispatchEvent(
       new CustomEvent(PREVIEW_START_EVENT, { detail: { voiceId: voice.id } })
     );
 
+    // ✅ 缓存命中：文本一致 → 直接重播，不发请求
+    if (blobUrlRef.current && cachedTextRef.current === previewText) {
+      const ok = await playCached();
+      if (ok) return;
+      // 播放失败就 fallback 到重新生成
+    }
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setStatus('loading');
+
     try {
-      const res = await fetch('/api/v1/speech', {
+      const res = await fetch('/api/v1/audio/speech', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          model: 'auto',
           voice: voice.id,
           input: previewText,
           response_format: 'mp3',
@@ -122,17 +148,24 @@ export default function VoicePreviewButton({ voice, defaultText }: Props) {
         URL.revokeObjectURL(blobUrlRef.current);
       }
       blobUrlRef.current = url;
+      cachedTextRef.current = previewText; // ✅ 记录缓存对应的文本
 
       const audio = new Audio(url);
       audioRef.current = audio;
 
+      // 播放结束：状态回到 idle，但保留 audio 元素供下次重播
       audio.onended = () => {
         setStatus('idle');
-        audioRef.current = null;
       };
       audio.onerror = () => {
         setStatus('idle');
+        // 音频出错，清掉失效的缓存
         audioRef.current = null;
+        if (blobUrlRef.current) {
+          URL.revokeObjectURL(blobUrlRef.current);
+          blobUrlRef.current = null;
+        }
+        cachedTextRef.current = null;
       };
 
       await audio.play();

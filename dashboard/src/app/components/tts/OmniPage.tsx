@@ -65,21 +65,6 @@ export default function OmniPage({ selectedKey }: OmniPageProps) {
       githubUrl="https://github.com/k2-fsa/OmniVoice"
       model="omni"
     >
-      {/* 特点说明 */}
-      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 shadow-sm mb-6">
-        <h3 className="text-lg font-semibold mb-4">模型特点</h3>
-        <div className="space-y-3 text-sm">
-          <div className="flex items-start gap-3 p-3 bg-[var(--background)] rounded-lg">
-            <span className="text-blue-600 dark:text-blue-400 font-semibold whitespace-nowrap">简单易用</span>
-            <span className="text-[var(--muted-text)]">无需复杂参数配置，开箱即用</span>
-          </div>
-          <div className="flex items-start gap-3 p-3 bg-[var(--background)] rounded-lg">
-            <span className="text-green-600 dark:text-green-400 font-semibold whitespace-nowrap">低延迟</span>
-            <span className="text-[var(--muted-text)]">模型轻量，推理速度快</span>
-          </div>
-        </div>
-      </div>
-
       {/* 测试面板 */}
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 shadow-sm mb-6">
         <h3 className="text-lg font-semibold mb-4">在线测试</h3>
