@@ -66,7 +66,8 @@ async def speech(request_body: SpeechRequest, request: Request):
     tts_status = 200
     auth_header = request.headers.get("Authorization", "")
     tts_token = auth_header.split(" ")[1] if auth_header.startswith("Bearer ") else ""
-    is_clone = bool(request_body.ref_audio) or bool(temp_ref_path and not is_temp_ref_temporary)
+    # 注意：此时 base64 分支尚未处理，但 auto-load 与 base64 互斥（auto-load 要求 ref_audio 为空）
+    is_clone = bool(request_body.ref_audio) or bool(temp_ref_path)
 
     def _log_tts(duration: float, status: int = 200):
         try:

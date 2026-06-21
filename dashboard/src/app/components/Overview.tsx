@@ -12,7 +12,8 @@ import {
   BookOpen, 
   Cpu, 
   ArrowRight,
-  Sparkles
+  Sparkles,
+  Github
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -80,6 +81,7 @@ export default function Overview({ stats, logs, isDarkMode, onTabChange }: Overv
           </h2>
           <p className="text-blue-100/90 text-sm leading-relaxed mb-6">
             VoxLab 是一个专注于本地语音技术研究、测试与生产级应用的实验平台。基于 FastAPI 和 Next.js 构建，旨在为您提供低延迟、高表现力的离线语音识别（ASR）、极致细腻的文本转语音（TTS）以及全双工交互能力。
+            <span className="block mt-2 font-mono text-xs opacity-75">开源 GitHub 地址: git@github.com:lepfinder/VoxLab.git</span>
           </p>
           <div className="flex flex-wrap gap-3">
             <button 
@@ -96,6 +98,15 @@ export default function Overview({ stats, logs, isDarkMode, onTabChange }: Overv
               阅读实战教程
               <BookOpen className="w-3.5 h-3.5" />
             </button>
+            <a 
+              href="https://github.com/lepfinder/VoxLab"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-5 py-2.5 bg-slate-900/40 hover:bg-slate-900/60 text-white border border-white/10 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all active:scale-95"
+            >
+              <Github className="w-3.5 h-3.5" />
+              GitHub 仓库
+            </a>
           </div>
         </div>
       </div>

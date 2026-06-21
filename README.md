@@ -2,12 +2,22 @@
 
 一个专注于本地语音技术研究与测试的语音实验室平台。基于 FastAPI 和 Next.js 构建，接入多个本地可运行的 ASR（语音识别）和 TTS（文字转语音）服务，提供演练场测试和相关接口文档，并对外提供标准的 API 服务。
 
+GitHub 仓库: [https://github.com/lepfinder/VoxLab](https://github.com/lepfinder/VoxLab)  
+Clone 地址: `git@github.com:lepfinder/VoxLab.git`
+
 ## 🌟 核心特性
 
 - **🚀 全能模型支持**：
   - **Chat**: 支持 Qwen, Llama3, GLM 等主流大模型。
-  - **ASR (语音转文字)**: 集成 SenseVoice, Qwen-Audio, Vosk。
-  - **TTS (文字转语音)**: 集成 Kokoro, VoxCPM, Qwen-TTS, Edge-TTS。
+  - **ASR (语音转文字)**: 集成 SenseVoice, Qwen ASR, Vosk。
+  - **TTS (文字转语音)**: 集成 Kokoro, VoxCPM, Qwen-TTS, Edge-TTS, OmniVoice。
+- **🎙️ 智能通话与文本净化**：
+  - 支持 WebSocket 全双工流式通话、静音打断以及实时字幕追踪。
+  - 内置 **TTS 文本净化过滤机制**：在发送给 TTS 合成之前，自动剥离括号及星号情感动作描述（如 `(笑)`、`*歪头*`），并过滤纯标点静音分句，杜绝发声杂音，同时在快照与数据库中依然保留最完整的内容。
+- **🗣️ 音色解耦与克隆管理**：
+  - 支持发音人 (Speaker) 与音色 (Voice) 解耦。
+  - 提供专属**人声克隆功能**：支持一键上传参考音频及其参考文本，Mac 端支持 MLX Base 模型本地快速克隆，Linux 支持原生 PyTorch 芯片加速。
+  - 每个发音人可独立配置个性化的 System Prompt 与大模型供应商路由。
 - **🔌 OpenAI 兼容**：标准化的 `/api/v1/chat/completions`、`/api/v1/audio/transcriptions` 和 `/api/v1/audio/speech` 接口，可无缝接入 Dify、FastGPT 等客户端。
 - **📊 现代化管理面板**：
   - **可视化仪表盘**: 实时监控系统请求量、Token 消耗及响应时长。
