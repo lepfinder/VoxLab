@@ -80,16 +80,25 @@ python main.py
 
 ## 📖 API 接口说明
 
-| 接口类型 | 端点 | 描述 |
-| :--- | :--- | :--- |
-| **Chat** | `/api/v1/chat/completions` | 文本对话生成 |
-| **ASR** | `/api/v1/audio/transcriptions` | 语音转文字 (支持文件上传) |
-| **TTS** | `/api/v1/audio/speech` | 文字转语音 (返回音频流) |
-| **Admin** | `/admin/*` | 系统状态、Token 及日志管理 |
+VoxLab 提供了与 OpenAI 规范兼容的 API 接口以及用于实时流式处理、人声克隆提取的特色接口。完整详细的接口传参与示例，请参阅 📄 [API 详细文档](docs/API_DOCUMENTATION.md)。
+
+### 接口概览
+
+| 接口分类 | 方法 | 端点 | 描述 |
+| :--- | :--- | :--- | :--- |
+| **对话服务** | `POST` | `/api/v1/chat/completions` | 文本对话生成 (OpenAI 兼容) |
+| **语音识别 (ASR)** | `POST` | `/api/v1/audio/transcriptions` | 语音转文字 (支持文件上传，OpenAI 兼容) |
+| **语音合成 (TTS)** | `POST` | `/api/v1/audio/speech` | 文字转语音 (支持流式，OpenAI 兼容) |
+| **发音人合成** | `POST` | `/api/v1/audio/speech/speaker` | 绑定预设发音人的一键式语音合成 |
+| **活动检测 (VAD)** | `POST` | `/api/v1/audio/vad` | 检测音频中人声说话起止时间片段 |
+| **声纹特征提取** | `POST` | `/api/v1/voiceprint/extract` | 提取人声音频的声纹高维特征向量 |
+| **实时 ASR** | `WS` | `/api/v1/audio/voice` | WebSocket 实时音频转写接口 |
+| **通话 Agent** | `WS` | `/api/v1/audio/agent/ws` | WebSocket 全双工流式智能通话 (支持打断) |
+| **系统管理** | `*` | `/admin/*` | 系统状态、密钥 Token 签发与调用日志管理 |
+
+> 💡 **鉴权说明**: 所有 HTTP/WebSocket 请求均需要包含 `Authorization: Bearer <YOUR_TOKEN>` 请求头，Token 可在本地管理后台概览页面一键签发。
 
 ## ⚙️ 配置文件
 修改根目录下的 `config.py` 来配置模型路径、数据库连接及模型自动卸载时长。
 
 ---
-
-*Built with ❤️ by Antigravity*
