@@ -29,4 +29,12 @@ HF_HOME = os.getenv("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
 
 # 镜像站配置 (如果需要使用镜像站，请修改此项)
 # 例如使用 hf-mirror: https://hf-mirror.com
-HF_ENDPOINT = os.getenv("HF_ENDPOINT", "https://hf-mirror.com") 
+HF_ENDPOINT = os.getenv("HF_ENDPOINT", "https://hf-mirror.com")
+
+# 运行时数据目录：锚定仓库根，不随 cwd 漂移；可用 VOXLAB_DATA_DIR 覆盖
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.abspath(
+    os.getenv("VOXLAB_DATA_DIR") or os.path.join(PROJECT_ROOT, "data")
+)
+DB_PATH = os.path.join(DATA_DIR, "server.db")
+CLONED_VOICES_DIR = os.path.join(DATA_DIR, "cloned_voices")

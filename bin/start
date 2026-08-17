@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# VoxLab 启动脚本
+# 用法: bin/start [--no-build] [--dev]
+#   --no-build  跳过前端构建检查
+#   --dev       开发模式（前端热更新，需另开窗口跑 npm run dev）
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PYTHON="/Users/xiyangxie/miniconda3/envs/voxlab/bin/python"
+PID_FILE="$ROOT/data/voxlab.pid"
+LOG_FILE="$ROOT/data/voxlab.log"
+PORT=8001
+
+SKIP_BUILD=false
+DEV_MODE_FLAG=false
+for arg in "$@"; do
+  case "$arg" in
+    --no-build) SKIP_BUILD=true ;;
+    --dev)      DEV_MODE_FLAG=true ;;
+    *) echo "未知参数: $arg"; exit 1 ;;
+  esac
+done
+
+mkdir -p "$ROOT/data"
+
+# 检查是否已在运行
+if [[ -f "$PID_FILE" ]]; then
+  OLD_PID=$(cat "$PID_FILE")
+  if kill -0 "$OLD_PID" 2>/dev/null; then
+    echo "VoxLab 已在运行 (PID $OLD_PID)"
+    exit 0
+  fi
+  rm -f "$PID_FILE"
+fi
+# 兜底：端口被占用但没有 pid 文件
+if lsof -ti :$PORT -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "端口 $PORT 已被占用（可能有非脚本启动的进程），请先 bin/stop 或手动处理"
+  exit 1
+fi
+
+# 前端构建检查（生产模式）
+if [[ "$SKIP_BUILD" == false && "$DEV_MODE_FLAG" == false ]]; then
+  OUT_INDEX="$ROOT/dashboard/out/index.html"
+  NEED_BUILD=false
+  if [[ ! -f "$OUT_INDEX" ]]; then
+    NEED_BUILD=true
+    echo "前端未构建过，开始 build..."
+  elif [[ -n "$(find "$ROOT/dashboard/src" "$ROOT/dashboard/package.json" -newer "$OUT_INDEX" -type f 2>/dev/null | head -1)" ]]; then
+    NEED_BUILD=true
+    echo "检测到前端源码更新，重新 build..."
+  fi
+  if [[ "$NEED_BUILD" == true ]]; then
+    (cd "$ROOT/dashboard" && npm run build)
+    echo "前端构建完成"
+  else
+    echo "前端构建是最新的，跳过 build"
+  fi
+fi
+
+# 启动
+export DEV_MODE="${DEV_MODE_FLAG}"
+echo "启动 VoxLab 后端 (port $PORT)..."
+nohup "$PYTHON" "$ROOT/main.py" >> "$LOG_FILE" 2>&1 &
+echo $! > "$PID_FILE"
+echo "PID: $(cat "$PID_FILE")，日志: $LOG_FILE"
+
+# 健康检查（模型预热约需 20-40s）
+echo -n "等待服务就绪"
+for i in $(seq 1 60); do
+  if curl -s "http://127.0.0.1:$PORT/health" 2>/dev/null | grep -q '"ok"'; then
+    echo ""
+    echo "VoxLab 已就绪 ✓  http://localhost:$PORT"
+    exit 0
+  fi
+  # 进程挂了就直接报错
+  if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+    echo ""
+    echo "进程已退出，请查看日志: $LOG_FILE"
+    tail -20 "$LOG_FILE"
+    rm -f "$PID_FILE"
+    exit 1
+  fi
+  echo -n "."
+  sleep 2
+done
+echo ""
+echo "超时未就绪（120s），请检查日志: $LOG_FILE"
+exit 1

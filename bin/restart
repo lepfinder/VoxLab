@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# VoxLab 重启脚本
+# 用法: bin/restart [--no-build] [--force]
+set -euo pipefail
+
+BIN="$(cd "$(dirname "$0")" && pwd)"
+
+STOP_ARGS=()
+START_ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --force)    STOP_ARGS+=("--force") ;;
+    --no-build) START_ARGS+=("--no-build") ;;
+    *) echo "未知参数: $arg"; exit 1 ;;
+  esac
+done
+
+if [[ ${#STOP_ARGS[@]} -gt 0 ]]; then
+  "$BIN/stop" "${STOP_ARGS[@]}"
+else
+  "$BIN/stop"
+fi
+echo "---"
+if [[ ${#START_ARGS[@]} -gt 0 ]]; then
+  "$BIN/start" "${START_ARGS[@]}"
+else
+  "$BIN/start"
+fi

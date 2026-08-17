@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# VoxLab 状态检查脚本
+# 用法: bin/status
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PID_FILE="$ROOT/data/voxlab.pid"
+PORT=8001
+
+echo "=== VoxLab 状态 ==="
+
+# 进程
+if [[ -f "$PID_FILE" ]]; then
+  PID=$(cat "$PID_FILE")
+  if kill -0 "$PID" 2>/dev/null; then
+    echo "进程: 运行中 (PID $PID)"
+  else
+    echo "进程: pid 文件存在但进程已死 (stale pid $PID)"
+  fi
+else
+  # 检查是否有脚本外启动的进程占着端口
+  PORT_PID=$(lsof -ti :$PORT -sTCP:LISTEN 2>/dev/null | head -1 || true)
+  if [[ -n "$PORT_PID" ]]; then
+    echo "进程: 端口 $PORT 被 PID $PORT_PID 占用（非脚本启动）"
+  else
+    echo "进程: 未运行"
+  fi
+fi
+
+# 健康检查
+if curl -s --max-time 3 "http://127.0.0.1:$PORT/health" 2>/dev/null | grep -q '"ok"'; then
+  echo "健康: ok ✓  http://localhost:$PORT"
+else
+  echo "健康: 无响应"
+fi
+
+# 前端构建新鲜度
+OUT_INDEX="$ROOT/dashboard/out/index.html"
+if [[ -f "$OUT_INDEX" ]]; then
+  NEWER=$(find "$ROOT/dashboard/src" "$ROOT/dashboard/package.json" -newer "$OUT_INDEX" -type f 2>/dev/null | head -5)
+  if [[ -n "$NEWER" ]]; then
+    echo "前端: 构建已过期，源码有更新："
+    echo "$NEWER" | sed 's/^/  - /'
+  else
+    echo "前端: 构建是最新的"
+  fi
+else
+  echo "前端: 未构建"
+fi

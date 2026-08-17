@@ -4,13 +4,15 @@ import time
 import uuid
 import logging
 
-logger = logging.getLogger(__name__)
+from config import DATA_DIR, DB_PATH
 
-DB_PATH = "data/server.db"
+logger = logging.getLogger(__name__)
 
 class Database:
     def __init__(self):
-        os.makedirs("data", exist_ok=True)
+        os.makedirs(DATA_DIR, exist_ok=True)
+        logger.info("VoxLab data dir: %s", DATA_DIR)
+        logger.info("VoxLab database: %s", DB_PATH)
         self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self._init_db()

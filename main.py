@@ -1,5 +1,5 @@
 import os
-from config import HF_HOME, HF_ENDPOINT
+from config import HF_HOME, HF_ENDPOINT, DATA_DIR, DB_PATH
 # 必须在导入任何 huggingface 相关的库之前设置环境变量
 os.environ["HF_HOME"] = HF_HOME
 os.environ["HF_ENDPOINT"] = HF_ENDPOINT
@@ -7,7 +7,7 @@ os.environ["HF_ENDPOINT"] = HF_ENDPOINT
 import logging
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -18,6 +18,7 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger("VoxLab")
+logger.info("VoxLab DATA_DIR=%s DB_PATH=%s", DATA_DIR, DB_PATH)
 
 from app.core.database import db
 

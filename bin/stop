@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# VoxLab 停止脚本
+# 用法: bin/stop [--force]
+#   --force  跳过优雅退出，直接 kill -9
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PID_FILE="$ROOT/data/voxlab.pid"
+PORT=8001
+
+FORCE=false
+if [[ "${1:-}" == "--force" ]]; then FORCE=true; fi
+
+# 收集候选 PID：pid 文件 + 端口监听进程
+PIDS=()
+if [[ -f "$PID_FILE" ]]; then
+  PIDS+=("$(cat "$PID_FILE")")
+fi
+while IFS= read -r p; do
+  [[ -n "$p" ]] && PIDS+=("$p")
+done < <(lsof -ti :$PORT -sTCP:LISTEN 2>/dev/null || true)
+
+# 去重 + 过滤不存在的
+ALIVE=()
+for pid in ${PIDS[@]+"${PIDS[@]}"}; do
+  [[ -z "$pid" ]] && continue
+  if kill -0 "$pid" 2>/dev/null; then
+    # 去重
+    dup=false
+    for a in ${ALIVE[@]+"${ALIVE[@]}"}; do
+      if [[ "$a" == "$pid" ]]; then dup=true; fi
+    done
+    if [[ "$dup" == false ]]; then ALIVE+=("$pid"); fi
+  fi
+done
+
+if [[ ${#ALIVE[@]} -eq 0 ]]; then
+  echo "VoxLab 未在运行"
+  rm -f "$PID_FILE"
+  exit 0
+fi
+
+if [[ "$FORCE" == true ]]; then
+  for pid in "${ALIVE[@]}"; do
+    echo "强制终止 PID $pid"
+    kill -9 "$pid" 2>/dev/null || true
+  done
+  rm -f "$PID_FILE"
+  echo "已停止 ✓"
+  exit 0
+fi
+
+# 优雅退出：SIGTERM，最多等 15s
+for pid in "${ALIVE[@]}"; do
+  echo "发送 SIGTERM 到 PID $pid..."
+  kill "$pid" 2>/dev/null || true
+done
+
+for i in $(seq 1 15); do
+  still_running=false
+  for pid in "${ALIVE[@]}"; do
+    if kill -0 "$pid" 2>/dev/null; then still_running=true; fi
+  done
+  if [[ "$still_running" == false ]]; then
+    rm -f "$PID_FILE"
+    echo "已停止 ✓"
+    exit 0
+  fi
+  sleep 1
+done
+
+echo "15s 内未退出，强制终止..."
+for pid in "${ALIVE[@]}"; do
+  kill -9 "$pid" 2>/dev/null || true
+done
+rm -f "$PID_FILE"
+echo "已停止 ✓"

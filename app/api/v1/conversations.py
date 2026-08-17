@@ -224,7 +224,8 @@ async def save_custom_voice(
                 os.remove(reference_audio_path)
             except:
                 pass
-        upload_dir = "data/cloned_voices"
+        from config import CLONED_VOICES_DIR
+        upload_dir = CLONED_VOICES_DIR
         os.makedirs(upload_dir, exist_ok=True)
         file_ext = os.path.splitext(file.filename)[-1] or ".wav"
         reference_audio_path = os.path.join(upload_dir, f"{voice_id}{file_ext}")
