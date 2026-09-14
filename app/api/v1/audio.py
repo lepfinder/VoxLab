@@ -23,6 +23,7 @@ from app.providers.tts.kokoro_provider import KokoroProvider
 from app.providers.tts.qwen_tts_provider import QwenTTSProvider
 from app.providers.tts.omni_provider import OmniVoiceProvider
 from app.providers.tts.voxcpm_provider import VoxCPMProvider
+from app.providers.tts.cosyvoice_provider import CosyVoiceProvider
 
 router = APIRouter(prefix="/api/v1/audio")
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 edge_tts_provider = EdgeTTSProvider()
 omni_provider = OmniVoiceProvider()
 voxcpm_provider = VoxCPMProvider()
+cosyvoice_provider = CosyVoiceProvider()
 
 
 @router.post("/speech")
@@ -183,6 +185,13 @@ async def speech(request_body: SpeechRequest, request: Request):
                             path = omni_provider.generate(request_body.input)
                         elif "vox" in model_key:
                             path = voxcpm_provider.generate(request_body.input)
+                        elif "cosyvoice" in model_key or "cosy" in model_key:
+                            path = cosyvoice_provider.generate(
+                                request_body.input,
+                                instruct=request_body.instruct or "",
+                                ref_audio=temp_ref_path,
+                                ref_text=request_body.ref_text,
+                            )
                         if path and os.path.exists(path):
                             data, sr = sf.read(path, dtype='int16')
                             if sr != 16000:
@@ -287,6 +296,13 @@ async def speech(request_body: SpeechRequest, request: Request):
                 instruct=request_body.instruct,
                 ref_audio=temp_ref_path,
                 ref_text=request_body.ref_text
+            )
+        elif "cosyvoice" in model_key or "cosy" in model_key:
+            output_path = cosyvoice_provider.generate(
+                request_body.input,
+                instruct=request_body.instruct or "",
+                ref_audio=temp_ref_path,
+                ref_text=request_body.ref_text,
             )
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported model: {request_body.model}")

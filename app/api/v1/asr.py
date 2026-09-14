@@ -16,6 +16,7 @@ from app.schemas.openai import TranscriptionResponse
 from app.providers.asr.sensevoice_provider import SenseVoiceProvider
 from app.providers.asr.vosk_provider import VoskProvider
 from app.providers.asr.qwen_asr_provider import QwenASRProvider
+from app.providers.asr.fun_asr_provider import FunASRNanoProvider
 from app.providers.vad.energy_vad import EnergyVADProvider
 from app.providers.vad.webrtc_vad import WebRTCVADProvider
 from app.providers.vad.silero_vad import SileroVADProvider
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 sensevoice_provider = SenseVoiceProvider()
 vosk_provider = VoskProvider()
 qwen_asr_provider = QwenASRProvider()
+fun_asr_provider = FunASRNanoProvider()
 
 energy_vad_provider = EnergyVADProvider()
 webrtc_vad_provider = WebRTCVADProvider()
@@ -83,6 +85,12 @@ async def transcribe(
             segments = result.get("segments")
             words = result.get("words")
             spk_embedding = result.get("spk_embedding")
+        elif "fun_asr" in model_key or "fun-asr" in model_key or "funasr" in model_key:
+            result = fun_asr_provider.transcribe(data, output_timestamp=want_timestamps)
+            text = result.get("text", "")
+            language = result.get("language", "zh")
+            segments = result.get("segments")
+            words = result.get("words")
         elif "vosk" in model_key:
             pcm_bytes = (np.clip(data, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
             text = vosk_provider.transcribe(pcm_bytes)

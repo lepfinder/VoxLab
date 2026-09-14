@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Vendor CosyVoice 仓库与 Fun-CosyVoice3 模型（供 cosyvoice_provider 使用）
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+VENDOR_DIR="${COSYVOICE_ROOT:-$ROOT/vendor/CosyVoice}"
+MODEL_DIR="${COSYVOICE_MODEL_DIR:-$ROOT/vendor/pretrained_models/Fun-CosyVoice3-0.5B}"
+MODEL_ID="FunAudioLLM/Fun-CosyVoice3-0.5B-2512"
+
+if [ ! -d "$VENDOR_DIR/.git" ]; then
+  echo "==> Cloning CosyVoice into $VENDOR_DIR"
+  git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git "$VENDOR_DIR"
+else
+  echo "==> CosyVoice already present: $VENDOR_DIR"
+fi
+
+echo "==> Ensuring submodules"
+git -C "$VENDOR_DIR" submodule update --init --recursive
+
+if [ ! -f "$MODEL_DIR/cosyvoice.yaml" ] && [ ! -f "$MODEL_DIR/llm.pt" ]; then
+  echo "==> Downloading $MODEL_ID -> $MODEL_DIR"
+  python - <<PY
+from modelscope import snapshot_download
+snapshot_download("$MODEL_ID", local_dir="$MODEL_DIR")
+print("done")
+PY
+else
+  echo "==> Model already present: $MODEL_DIR"
+fi
+
+echo "==> Installing CosyVoice Python requirements (optional, may take a while)"
+if [ -f "$VENDOR_DIR/requirements.txt" ]; then
+  pip install -r "$VENDOR_DIR/requirements.txt" || {
+    echo "pip install failed; install CosyVoice deps manually: $VENDOR_DIR/requirements.txt"
+  }
+fi
+
+echo "OK. Set COSYVOICE_ROOT=$VENDOR_DIR if not using default path."

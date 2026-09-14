@@ -45,7 +45,8 @@
 - **方法**: `POST`
 - **参数**:
   - `file`: 音频文件 (multipart/form-data)
-  - `model`: 模型 ID (`sensevoice`, `qwen`, `vosk`，默认 `sensevoice`)
+  - `model`: 模型 ID (`sensevoice`, `fun_asr_nano`, `qwen`, `vosk`，默认 `sensevoice`)
+    - `fun_asr_nano`: Fun-ASR-Nano-2512（阿里通义 800M，方言/口音/歌词，默认 ModelScope hub）
   - `response_format` (可选): 返回数据格式，默认为 `"json"`，保持 100% OpenAI 生态向后兼容。
     - `"json"`: 仅返回 `{"text": "..."}`。
     - `"verbose_json"`: 返回详细信息，包含识别语种 `language`、音频时长 `duration`、单句时间戳分段 `segments` (`[{id, start, end, text, words}]`) 及分词列表 `words`。
@@ -57,7 +58,14 @@
     -F "file=@audio.wav" \
     -F "model=sensevoice"
   ```
-- **示例 (详细时间戳分段，供 Notix/字幕软件使用)**:
+- **示例 (Fun-ASR-Nano)**:
+  ```bash
+  curl http://localhost:8001/api/v1/audio/transcriptions \
+    -H "Authorization: Bearer sk-your-token" \
+    -F "file=@audio.wav" \
+    -F "model=fun_asr_nano"
+  ```
+- **示例 (详细时间戳分段，供字幕软件使用)**:
   ```bash
   curl http://localhost:8001/api/v1/audio/transcriptions \
     -H "Authorization: Bearer sk-your-token" \
@@ -74,7 +82,8 @@
 - **路径**: `/api/v1/audio/speech`
 - **方法**: `POST`
 - **参数**:
-  - `model`: 模型 ID (`kokoro`, `qwen`, `voxcpm`, `omni`, `edge-tts`)
+  - `model`: 模型 ID (`kokoro`, `qwen`, `voxcpm`, `omni`, `edge-tts`, `fun_cosyvoice3`)
+    - `fun_cosyvoice3`: Fun-CosyVoice3-0.5B（阿里通义 0.5B 流式克隆；需先 vendor CosyVoice 仓库，克隆时传 `ref_audio` + `ref_text`）
   - `input`: 目标文本
   - `voice`: 发音人 ID / 音色名称（如 Kokoro 的 `am_nicole`，Edge TTS 的 `zh-CN-XiaoxiaoNeural` 等）
   - `response_format` (可选): 响应音频格式，默认为 `"mp3"`。

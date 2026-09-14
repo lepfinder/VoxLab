@@ -34,6 +34,7 @@ const MENU_ITEMS = [
 
 const ASR_PROVIDERS = [
   { id: 'asr-sensevoice', label: 'SenseVoice', description: '快速 + 声纹提取' },
+  { id: 'asr-fun-asr', label: 'Fun-ASR-Nano', description: '方言口音 · 官方后继' },
   { id: 'asr-qwen', label: 'Qwen ASR', description: 'Apple Silicon 优化' },
   { id: 'asr-vosk', label: 'Vosk', description: '轻量离线' },
 ];
@@ -41,6 +42,7 @@ const ASR_PROVIDERS = [
 const TTS_PROVIDERS = [
   { id: 'tts-kokoro', label: 'Kokoro', description: '多语言多音色' },
   { id: 'tts-qwen', label: 'Qwen TTS', description: '三种模式' },
+  { id: 'tts-cosyvoice', label: 'Fun-CosyVoice3', description: '0.5B 流式克隆' },
   { id: 'tts-voxcpm', label: 'VoxCPM', description: '情感控制' },
   { id: 'tts-omni', label: 'OmniVoice', description: '基础 TTS' },
   { id: 'tts-edge', label: 'Edge TTS', description: '云端免费' },

@@ -340,12 +340,14 @@ async def system_check():
     # 剔除 voiceprint 等非主流程大模型，列出主要的 ASR 和 TTS 模型
     main_models = {
         "sensevoice": "SenseVoice (语音识别/ASR)",
+        "fun_asr_nano": "Fun-ASR-Nano (方言/口音语音识别/ASR)",
         "qwen_asr": "Qwen ASR (语音识别/ASR)",
         "vosk": "Vosk CN Model (语音识别/ASR)",
         "kokoro": "Kokoro (轻量文本转语音/TTS)",
         "qwen_tts_design": "Qwen TTS VoiceDesign (个性化文本转语音/TTS)",
         "qwen_tts_custom": "Qwen TTS CustomVoice (预设音色文本转语音/TTS)",
         "qwen_tts_base": "Qwen TTS Base (声音克隆文本转语音/TTS)",
+        "fun_cosyvoice3": "Fun-CosyVoice3 (0.5B 流式克隆文本转语音/TTS)",
         "omni_voice": "OmniVoice (语气定制文本转语音/TTS)",
         "vox_cpm": "VoxCPM (情感控制文本转语音/TTS)"
     }

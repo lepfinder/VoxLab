@@ -16,18 +16,22 @@ temp_audio/*
 
 
 
-# Models (模型文件通常很大，不建议提交)
-models/
+# Models (模型文件通常很大，不建议提交；仅忽略仓库根 models/，不影响 docs/models/)
+/models/
 *.bin
 *.pth
 *.onnx
 *.joblib
+
+# Vendor 依赖（CosyVoice 等本地 clone，见 bin/setup_fun_providers）
+/vendor/
 
 # Dashboard (Next.js)
 dashboard/node_modules/
 dashboard/.next/
 dashboard/out/
 dashboard/.env*.local
+dashboard/tsconfig.tsbuildinfo
 
 # OS
 .DS_Store
