@@ -37,17 +37,24 @@ silero_vad_provider = SileroVADProvider()
 async def transcribe(
     request: Request,
     file: UploadFile = File(...),
-    model: str = Form("sensevoice")
+    model: str = Form("sensevoice"),
+    response_format: str = Form("json"),
 ):
     from app.core.database import db
+    from fastapi.responses import PlainTextResponse
     request.state.model_name = model
-    logger.info(f"[ASR] Request received. File: {file.filename}, Content-Type: {file.content_type}, Model: {model}")
+    fmt = (response_format or "json").lower()
+    logger.info(f"[ASR] Request received. File: {file.filename}, Content-Type: {file.content_type}, Model: {model}, Format: {fmt}")
 
     start_time = time.time()
     temp_path = None
     audio_format = os.path.splitext(file.filename)[1] if file.filename else ".webm"
     audio_duration_s = 0.0
     text = ""
+    language = "zh"
+    segments = None
+    words = None
+    spk_embedding = None
     status_code = 200
 
     # 提取 token
@@ -67,10 +74,15 @@ async def transcribe(
         audio_duration_s = float(len(data)) / sr
 
         model_key = model.lower()
+        want_timestamps = fmt == "verbose_json"
 
         if "sensevoice" in model_key:
-            result = sensevoice_provider.transcribe(data)
+            result = sensevoice_provider.transcribe(data, output_timestamp=want_timestamps)
             text = result.get("text", "")
+            language = result.get("language", "zh")
+            segments = result.get("segments")
+            words = result.get("words")
+            spk_embedding = result.get("spk_embedding")
         elif "vosk" in model_key:
             pcm_bytes = (np.clip(data, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
             text = vosk_provider.transcribe(pcm_bytes)
@@ -81,9 +93,31 @@ async def transcribe(
             raise HTTPException(status_code=400, detail=f"Unsupported ASR model: {model}")
 
         logger.info(f"[ASR] Transcription result: {text}")
+
+        # 针对 text 格式直接返回纯文本
+        if fmt == "text":
+            return PlainTextResponse(text, headers={"X-Model-Name": model})
+
+        # verbose_json 返回详细分段与元数据
+        if fmt == "verbose_json":
+            resp = TranscriptionResponse(
+                task="transcribe",
+                language=language,
+                duration=round(audio_duration_s, 2),
+                text=text,
+                segments=segments,
+                words=words,
+                spk_embedding=spk_embedding,
+            )
+            return JSONResponse(
+                content=resp.model_dump(exclude_none=True),
+                headers={"X-Model-Name": model},
+            )
+
+        # 默认标准 json: 仅返回 text，保持 100% 现有生态兼容
         resp = TranscriptionResponse(text=text)
         return JSONResponse(
-            content=resp.model_dump(),
+            content=resp.model_dump(exclude_none=True),
             headers={"X-Model-Name": model},
         )
 

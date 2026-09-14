@@ -45,13 +45,25 @@
 - **方法**: `POST`
 - **参数**:
   - `file`: 音频文件 (multipart/form-data)
-  - `model`: 模型 ID (`sensevoice`, `qwen`, `vosk`)
-- **示例**:
+  - `model`: 模型 ID (`sensevoice`, `qwen`, `vosk`，默认 `sensevoice`)
+  - `response_format` (可选): 返回数据格式，默认为 `"json"`，保持 100% OpenAI 生态向后兼容。
+    - `"json"`: 仅返回 `{"text": "..."}`。
+    - `"verbose_json"`: 返回详细信息，包含识别语种 `language`、音频时长 `duration`、单句时间戳分段 `segments` (`[{id, start, end, text, words}]`) 及分词列表 `words`。
+    - `"text"`: 直接返回识别出的纯文本字符串。
+- **示例 (标准兼容调用)**:
   ```bash
   curl http://localhost:8001/api/v1/audio/transcriptions \
     -H "Authorization: Bearer sk-your-token" \
     -F "file=@audio.wav" \
-    -F "model=qwen"
+    -F "model=sensevoice"
+  ```
+- **示例 (详细时间戳分段，供 Notix/字幕软件使用)**:
+  ```bash
+  curl http://localhost:8001/api/v1/audio/transcriptions \
+    -H "Authorization: Bearer sk-your-token" \
+    -F "file=@audio.wav" \
+    -F "model=sensevoice" \
+    -F "response_format=verbose_json"
   ```
 
 ---
