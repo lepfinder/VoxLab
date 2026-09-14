@@ -45,13 +45,14 @@
 - **方法**: `POST`
 - **参数**:
   - `file`: 音频文件 (multipart/form-data)
-  - `model`: 模型 ID (`sensevoice`, `qwen`, `vosk`)
+  - `model`: 模型 ID (`sensevoice`, `fun_asr_nano`, `qwen`, `vosk`)
+    - `fun_asr_nano`: Fun-ASR-Nano-2512（阿里通义 800M，方言/口音/歌词，默认 ModelScope hub）
 - **示例**:
   ```bash
   curl http://localhost:8001/api/v1/audio/transcriptions \
     -H "Authorization: Bearer sk-your-token" \
     -F "file=@audio.wav" \
-    -F "model=qwen"
+    -F "model=fun_asr_nano"
   ```
 
 ---
@@ -62,7 +63,8 @@
 - **路径**: `/api/v1/audio/speech`
 - **方法**: `POST`
 - **参数**:
-  - `model`: 模型 ID (`kokoro`, `qwen`, `voxcpm`, `omni`, `edge-tts`)
+  - `model`: 模型 ID (`kokoro`, `qwen`, `voxcpm`, `omni`, `edge-tts`, `fun_cosyvoice3`)
+    - `fun_cosyvoice3`: Fun-CosyVoice3-0.5B（阿里通义 0.5B 流式克隆；需先 vendor CosyVoice 仓库，克隆时传 `ref_audio` + `ref_text`）
   - `input`: 目标文本
   - `voice`: 发音人 ID / 音色名称（如 Kokoro 的 `am_nicole`，Edge TTS 的 `zh-CN-XiaoxiaoNeural` 等）
   - `response_format` (可选): 响应音频格式，默认为 `"mp3"`。

@@ -11,6 +11,8 @@ MODELS = {
     "vosk": "vosk-model-small-cn-0.22", # 本地兼容处理
     "sensevoice": "iic/SenseVoiceSmall",
     "qwen_asr": "mlx-community/Qwen3-ASR-0.6B-4bit" if IS_MACOS else "Qwen/Qwen3-ASR-0.6B",
+    # Fun-ASR-Nano：SenseVoice 官方后继（800M，方言/口音/歌词）。默认走 ModelScope 以获取 CTC 时间戳
+    "fun_asr_nano": "FunAudioLLM/Fun-ASR-Nano-2512",
 
     # TTS 模型
     "kokoro": "hexgrad/Kokoro-82M",
@@ -19,6 +21,8 @@ MODELS = {
     "qwen_tts_base": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit" if IS_MACOS else "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
     "omni_voice": "k2-fsa/OmniVoice",
     "vox_cpm": "openbmb/VoxCPM2",
+    # Fun-CosyVoice3：0.5B 轻量流式克隆，Apache-2.0。需 vendor CosyVoice 仓库
+    "fun_cosyvoice3": "FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
 
     # 声纹模型
     "voiceprint": "iic/speech_campplus_sv_zh-cn_16k-common",
@@ -38,3 +42,18 @@ DATA_DIR = os.path.abspath(
 )
 DB_PATH = os.path.join(DATA_DIR, "server.db")
 CLONED_VOICES_DIR = os.path.join(DATA_DIR, "cloned_voices")
+
+# Fun-ASR-Nano 推理配置
+# hub: ms=ModelScope（含 CTC 时间戳权重），hf=HuggingFace（时间戳可能缺失）
+FUN_ASR_HUB = os.getenv("FUN_ASR_HUB", "ms")
+# 可选：指向 Fun-ASR 仓库中的 model.py（若权重包内未内置 remote code）
+FUN_ASR_REMOTE_CODE = os.getenv("FUN_ASR_REMOTE_CODE", "")
+
+# CosyVoice 推理配置：本地克隆的 CosyVoice 仓库与模型目录
+COSYVOICE_ROOT = os.path.abspath(
+    os.getenv("COSYVOICE_ROOT") or os.path.join(PROJECT_ROOT, "vendor", "CosyVoice")
+)
+COSYVOICE_MODEL_DIR = os.path.abspath(
+    os.getenv("COSYVOICE_MODEL_DIR")
+    or os.path.join(PROJECT_ROOT, "vendor", "pretrained_models", "Fun-CosyVoice3-0.5B")
+)

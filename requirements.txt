@@ -23,3 +23,6 @@ mlx-audio; sys_platform == "darwin"
 # Linux: PyTorch 版 Qwen ASR/TTS
 qwen-asr; sys_platform == "linux"
 qwen-tts; sys_platform == "linux"
+
+# Fun-ASR-Nano 依赖 funasr（已在上方）；时间戳请使用 ModelScope hub（默认 FUN_ASR_HUB=ms）
+# Fun-CosyVoice3 需本地 vendor CosyVoice 仓库，见 docs/FUN_PROVIDERS.md

@@ -6,10 +6,12 @@ import Overview from './components/Overview';
 import Tokens from './components/Tokens';
 import Logs from './components/Logs';
 import SenseVoicePage from './components/asr/SenseVoicePage';
+import FunASRNanoPage from './components/asr/FunASRNanoPage';
 import QwenASRPage from './components/asr/QwenASRPage';
 import VoskPage from './components/asr/VoskPage';
 import KokoroPage from './components/tts/KokoroPage';
 import QwenTTSPage from './components/tts/QwenTTSPage';
+import CosyVoicePage from './components/tts/CosyVoicePage';
 import VoxCPMPage from './components/tts/VoxCPMPage';
 import OmniPage from './components/tts/OmniPage';
 import EdgePage from './components/tts/EdgePage';
@@ -32,10 +34,12 @@ const PAGE_TITLES: Record<string, string> = {
   tutorials: '实战与原理教程',
   'api-docs': 'API 接口文档',
   'asr-sensevoice': 'SenseVoice',
+  'asr-fun-asr': 'Fun-ASR-Nano',
   'asr-qwen': 'Qwen ASR',
   'asr-vosk': 'Vosk',
   'tts-kokoro': 'Kokoro',
   'tts-qwen': 'Qwen TTS',
+  'tts-cosyvoice': 'Fun-CosyVoice3',
   'tts-voxcpm': 'VoxCPM',
   'tts-omni': 'OmniVoice',
   'tts-edge': 'Edge TTS',
@@ -180,6 +184,8 @@ export default function AdminDashboard() {
         );
       case 'asr-sensevoice':
         return <SenseVoicePage selectedKey={selectedKey} />;
+      case 'asr-fun-asr':
+        return <FunASRNanoPage selectedKey={selectedKey} />;
       case 'asr-qwen':
         return <QwenASRPage selectedKey={selectedKey} />;
       case 'asr-vosk':
@@ -188,6 +194,8 @@ export default function AdminDashboard() {
         return <KokoroPage selectedKey={selectedKey} />;
       case 'tts-qwen':
         return <QwenTTSPage selectedKey={selectedKey} />;
+      case 'tts-cosyvoice':
+        return <CosyVoicePage selectedKey={selectedKey} />;
       case 'tts-voxcpm':
         return <VoxCPMPage selectedKey={selectedKey} />;
       case 'tts-omni':
