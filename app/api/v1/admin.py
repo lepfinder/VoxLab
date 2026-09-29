@@ -80,18 +80,26 @@ async def list_logs(limit: int = 100):
 
 
 @router.get("/logs/asr")
-async def list_asr_logs(limit: int = 100):
-    return db.get_asr_logs(limit)
+async def list_asr_logs(limit: int = 20, offset: int = 0):
+    items = db.get_asr_logs(limit, offset)
+    return {"items": items, "total": db.get_log_counts()["asr"], "limit": limit, "offset": offset}
 
 
 @router.get("/logs/tts")
-async def list_tts_logs(limit: int = 100):
-    return db.get_tts_logs(limit)
+async def list_tts_logs(limit: int = 20, offset: int = 0):
+    items = db.get_tts_logs(limit, offset)
+    return {"items": items, "total": db.get_log_counts()["tts"], "limit": limit, "offset": offset}
 
 
 @router.get("/logs/llm")
-async def list_llm_logs(limit: int = 100):
-    return db.get_llm_logs(limit)
+async def list_llm_logs(limit: int = 20, offset: int = 0):
+    items = db.get_llm_logs(limit, offset)
+    return {"items": items, "total": db.get_log_counts()["llm"], "limit": limit, "offset": offset}
+
+
+@router.get("/logs/counts")
+async def list_log_counts():
+    return db.get_log_counts()
 
 
 # API 文档目录

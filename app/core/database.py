@@ -381,20 +381,33 @@ class Database:
               prompt_tokens, completion_tokens, total_tokens, 1 if is_stream else 0))
         self.conn.commit()
 
-    def get_asr_logs(self, limit: int = 100):
+    # created_at 只精确到秒，同秒记录以 id 倒序兜底保证分页稳定
+    def _get_logs_page(self, table: str, limit: int, offset: int):
+        if table not in ("asr_logs", "tts_logs", "llm_logs"):
+            raise ValueError(f"非法日志表: {table}")
         cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM asr_logs ORDER BY created_at DESC LIMIT ?", (limit,))
+        cursor.execute(
+            f"SELECT * FROM {table} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        )
         return [dict(row) for row in cursor.fetchall()]
 
-    def get_tts_logs(self, limit: int = 100):
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM tts_logs ORDER BY created_at DESC LIMIT ?", (limit,))
-        return [dict(row) for row in cursor.fetchall()]
+    def get_asr_logs(self, limit: int = 20, offset: int = 0):
+        return self._get_logs_page("asr_logs", limit, offset)
 
-    def get_llm_logs(self, limit: int = 100):
+    def get_tts_logs(self, limit: int = 20, offset: int = 0):
+        return self._get_logs_page("tts_logs", limit, offset)
+
+    def get_llm_logs(self, limit: int = 20, offset: int = 0):
+        return self._get_logs_page("llm_logs", limit, offset)
+
+    def get_log_counts(self):
         cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM llm_logs ORDER BY created_at DESC LIMIT ?", (limit,))
-        return [dict(row) for row in cursor.fetchall()]
+        counts = {}
+        for key, table in (("asr", "asr_logs"), ("tts", "tts_logs"), ("llm", "llm_logs")):
+            cursor.execute(f"SELECT COUNT(*) FROM {table}")
+            counts[key] = cursor.fetchone()[0]
+        return counts
 
     # --- Conversations ---
     def create_conversation(self, conv_id: str, title: str = "新对话"):

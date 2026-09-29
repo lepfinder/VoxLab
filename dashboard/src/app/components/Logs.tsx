@@ -60,22 +60,40 @@ const TABS: { id: LogType; label: string; icon: any; color: string }[] = [
   { id: 'llm', label: 'LLM', icon: Bot, color: 'text-blue-600 bg-blue-500/10' },
 ];
 
+const PAGE_SIZE = 20;
+
 export default function Logs() {
   const [activeTab, setActiveTab] = useState<LogType>('asr');
   const [asrLogs, setAsrLogs] = useState<ASRLog[]>([]);
   const [ttsLogs, setTtsLogs] = useState<TTSLog[]>([]);
   const [llmLogs, setLlmLogs] = useState<LLMLog[]>([]);
+  const [totals, setTotals] = useState<Record<LogType, number>>({ asr: 0, tts: 0, llm: 0 });
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  const fetchLogs = async (type: LogType) => {
+  const fetchCounts = async () => {
+    try {
+      const res = await fetch('/admin/logs/counts');
+      const data = await res.json();
+      setTotals({ asr: data.asr ?? 0, tts: data.tts ?? 0, llm: data.llm ?? 0 });
+    } catch (e) {
+      console.error('获取日志总数失败', e);
+    }
+  };
+
+  const fetchLogs = async (type: LogType, pageIndex: number) => {
     setLoading(true);
     try {
-      const res = await fetch(`/admin/logs/${type}`);
+      const res = await fetch(`/admin/logs/${type}?limit=${PAGE_SIZE}&offset=${pageIndex * PAGE_SIZE}`);
       const data = await res.json();
-      if (type === 'asr') setAsrLogs(data);
-      else if (type === 'tts') setTtsLogs(data);
-      else setLlmLogs(data);
+      const items = Array.isArray(data) ? data : (data.items || []);
+      if (type === 'asr') setAsrLogs(items);
+      else if (type === 'tts') setTtsLogs(items);
+      else setLlmLogs(items);
+      if (!Array.isArray(data) && typeof data.total === 'number') {
+        setTotals(prev => ({ ...prev, [type]: data.total }));
+      }
     } catch (e) {
       console.error(`获取 ${type} 日志失败`, e);
     } finally {
@@ -85,25 +103,28 @@ export default function Logs() {
   };
 
   useEffect(() => {
-    fetchLogs(activeTab);
-  }, [activeTab]);
+    fetchCounts();
+  }, []);
+
+  useEffect(() => {
+    fetchLogs(activeTab, page);
+  }, [activeTab, page]);
 
   const currentLogs = activeTab === 'asr' ? asrLogs : activeTab === 'tts' ? ttsLogs : llmLogs;
+  const total = totals[activeTab];
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div className="space-y-5">
       {/* Tab 切换 */}
       <div className="flex gap-2 border-b border-[var(--card-border)] pb-3">
         {TABS.map(tab => {
-          const count =
-            tab.id === 'asr' ? asrLogs.length :
-            tab.id === 'tts' ? ttsLogs.length :
-            llmLogs.length;
+          const count = totals[tab.id];
           const isActive = activeTab === tab.id;
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => { setActiveTab(tab.id); setPage(0); }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 isActive
                   ? `${tab.color} shadow-sm`
@@ -132,10 +153,26 @@ export default function Logs() {
           <div className="text-xs mt-1">发起一次 {activeTab === 'asr' ? '语音识别' : activeTab === 'tts' ? '语音合成' : 'LLM 对话'} 请求后，日志会出现在这里</div>
         </div>
       ) : (
-        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl overflow-hidden shadow-sm">
-          {activeTab === 'asr' && <ASRTable logs={asrLogs} expandedId={expandedId} setExpandedId={setExpandedId} />}
-          {activeTab === 'tts' && <TTSTable logs={ttsLogs} expandedId={expandedId} setExpandedId={setExpandedId} />}
-          {activeTab === 'llm' && <LLMTable logs={llmLogs} expandedId={expandedId} setExpandedId={setExpandedId} />}
+        <div className="space-y-3">
+          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl overflow-hidden shadow-sm">
+            {activeTab === 'asr' && <ASRTable logs={asrLogs} expandedId={expandedId} setExpandedId={setExpandedId} />}
+            {activeTab === 'tts' && <TTSTable logs={ttsLogs} expandedId={expandedId} setExpandedId={setExpandedId} />}
+            {activeTab === 'llm' && <LLMTable logs={llmLogs} expandedId={expandedId} setExpandedId={setExpandedId} />}
+          </div>
+          {/* 翻页条 */}
+          <div className="flex items-center justify-end gap-3 text-xs text-[var(--muted-text)]">
+            <span>共 {total} 条 · 第 {page + 1}/{totalPages} 页</span>
+            <button
+              disabled={page === 0}
+              onClick={() => setPage(p => p - 1)}
+              className="px-3 py-1.5 rounded-lg border border-[var(--card-border)] hover:bg-[var(--foreground)]/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >上一页</button>
+            <button
+              disabled={page + 1 >= totalPages}
+              onClick={() => setPage(p => p + 1)}
+              className="px-3 py-1.5 rounded-lg border border-[var(--card-border)] hover:bg-[var(--foreground)]/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >下一页</button>
+          </div>
         </div>
       )}
     </div>
