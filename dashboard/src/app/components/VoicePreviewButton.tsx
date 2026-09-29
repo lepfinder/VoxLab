@@ -132,6 +132,7 @@ export default function VoicePreviewButton({ voice, defaultText }: Props) {
           voice: voice.id,
           input: previewText,
           response_format: 'mp3',
+          cache: true,
         }),
         signal: controller.signal,
       });
@@ -190,7 +191,7 @@ export default function VoicePreviewButton({ voice, defaultText }: Props) {
           ? '生成中…（点击取消）'
           : '点击停止'
       }
-      className={`relative w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg transition-all active:scale-95 shrink-0
+      className={`relative w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg transition-all shrink-0
         ${
           status === 'playing'
             ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-500'
@@ -208,11 +209,11 @@ export default function VoicePreviewButton({ voice, defaultText }: Props) {
       )}
 
       {status === 'loading' ? (
-        <Loader2 size={20} className="animate-spin relative" />
+        <Loader2 size={18} className="animate-spin relative" />
       ) : status === 'playing' ? (
-        <Volume2 size={20} className="relative" />
+        <Volume2 size={18} className="relative" />
       ) : (
-        <Volume2 size={20} className="relative" />
+        <Volume2 size={18} className="relative" />
       )}
     </button>
   );

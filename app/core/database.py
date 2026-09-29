@@ -128,6 +128,22 @@ class Database:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # 语音供应商配置表（OpenRouter 等三方 ASR/TTS API，独立于 llm_configs）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS voice_provider_configs (
+                id TEXT PRIMARY KEY,
+                capability TEXT NOT NULL CHECK (capability IN ('asr', 'tts')),
+                provider TEXT NOT NULL,
+                name TEXT NOT NULL,
+                base_url TEXT NOT NULL,
+                api_key TEXT NOT NULL,
+                model TEXT NOT NULL,
+                voice TEXT,
+                enabled INTEGER DEFAULT 1,
+                is_default INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         # 创建音色配置表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS voices (
@@ -150,6 +166,7 @@ class Database:
         v_columns = [column[1] for column in cursor.fetchall()]
         new_v_columns = [
             ("preview_text", "TEXT"),
+            ("tts_model", "TEXT"),
         ]
         for col_name, col_type in new_v_columns:
             if col_name not in v_columns:
@@ -537,6 +554,79 @@ class Database:
         cursor.execute("DELETE FROM llm_configs WHERE id = ?", (config_id,))
         self.conn.commit()
 
+    # --- Voice Provider Configs (三方 ASR/TTS) ---
+    def list_voice_provider_configs(self, capability: str = None):
+        cursor = self.conn.cursor()
+        if capability:
+            cursor.execute("SELECT * FROM voice_provider_configs WHERE capability = ? ORDER BY created_at ASC", (capability,))
+        else:
+            cursor.execute("SELECT * FROM voice_provider_configs ORDER BY created_at ASC")
+        rows = [dict(row) for row in cursor.fetchall()]
+        for r in rows:
+            r["api_key"] = self._mask_api_key(r["api_key"])
+        return rows
+
+    def get_voice_provider_config(self, config_id: str):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM voice_provider_configs WHERE id = ?", (config_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def get_default_voice_provider_config(self, capability: str):
+        """按能力取默认配置：is_default 优先，其次最早一条启用的。"""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT * FROM voice_provider_configs WHERE capability = ? AND enabled = 1 AND is_default = 1 LIMIT 1",
+            (capability,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            cursor.execute(
+                "SELECT * FROM voice_provider_configs WHERE capability = ? AND enabled = 1 ORDER BY created_at ASC LIMIT 1",
+                (capability,),
+            )
+            row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def save_voice_provider_config(self, config_id: str, capability: str, provider: str, name: str,
+                                   base_url: str, api_key: str, model: str, voice: str = None,
+                                   enabled: bool = True, is_default: bool = False):
+        if capability not in ("asr", "tts"):
+            raise ValueError(f"invalid capability: {capability}")
+        cursor = self.conn.cursor()
+        # 该能力下第一条配置自动成为默认
+        cursor.execute("SELECT COUNT(*) FROM voice_provider_configs WHERE capability = ?", (capability,))
+        first_for_capability = cursor.fetchone()[0] == 0
+        if is_default or first_for_capability:
+            cursor.execute("UPDATE voice_provider_configs SET is_default = 0 WHERE capability = ?", (capability,))
+        default_flag = 1 if (is_default or first_for_capability) else 0
+        existing = self.get_voice_provider_config(config_id) if config_id else None
+        # 脱敏占位回写时保留原密钥
+        api_key_to_save = existing["api_key"] if (existing and "•" in api_key) else api_key
+        cursor.execute(
+            """INSERT INTO voice_provider_configs (id, capability, provider, name, base_url, api_key, model, voice, enabled, is_default)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                 capability=excluded.capability,
+                 provider=excluded.provider,
+                 name=excluded.name,
+                 base_url=excluded.base_url,
+                 api_key=excluded.api_key,
+                 model=excluded.model,
+                 voice=excluded.voice,
+                 enabled=excluded.enabled,
+                 is_default=excluded.is_default""",
+            (config_id, capability, provider, name, base_url, api_key_to_save, model, voice,
+             1 if enabled else 0, default_flag),
+        )
+        self.conn.commit()
+        return self.get_voice_provider_config(config_id)
+
+    def delete_voice_provider_config(self, config_id: str):
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM voice_provider_configs WHERE id = ?", (config_id,))
+        self.conn.commit()
+
     # --- Speakers (发音人) ---
     def list_speakers(self):
         cursor = self.conn.cursor()
@@ -593,11 +683,12 @@ class Database:
         return dict(row) if row else None
 
     def save_custom_voice(self, voice_id: str, name: str, description: str, tts_provider: str, tts_voice: str,
-                          reference_audio: str = None, language: str = "zh", preview_text: str = None) -> dict:
+                          reference_audio: str = None, language: str = "zh", preview_text: str = None,
+                          tts_model: str = None) -> dict:
         cursor = self.conn.cursor()
         cursor.execute(
-            """INSERT INTO voices (id, name, description, tts_provider, tts_voice, reference_audio, language, preview_text, is_preset)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+            """INSERT INTO voices (id, name, description, tts_provider, tts_voice, reference_audio, language, preview_text, tts_model, is_preset)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                ON CONFLICT(id) DO UPDATE SET
                  name=excluded.name,
                  description=excluded.description,
@@ -605,8 +696,9 @@ class Database:
                  tts_voice=excluded.tts_voice,
                  reference_audio=excluded.reference_audio,
                  language=excluded.language,
-                 preview_text=excluded.preview_text""",
-            (voice_id, name, description, tts_provider, tts_voice, reference_audio, language, preview_text)
+                 preview_text=excluded.preview_text,
+                 tts_model=excluded.tts_model""",
+            (voice_id, name, description, tts_provider, tts_voice, reference_audio, language, preview_text, tts_model)
         )
         self.conn.commit()
         return self.get_voice(voice_id)

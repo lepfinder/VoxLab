@@ -17,6 +17,7 @@ from app.providers.asr.sensevoice_provider import SenseVoiceProvider
 from app.providers.asr.vosk_provider import VoskProvider
 from app.providers.asr.qwen_asr_provider import QwenASRProvider
 from app.providers.asr.fun_asr_provider import FunASRNanoProvider
+from app.providers.asr.openrouter_asr_provider import OpenRouterASRProvider
 from app.providers.vad.energy_vad import EnergyVADProvider
 from app.providers.vad.webrtc_vad import WebRTCVADProvider
 from app.providers.vad.silero_vad import SileroVADProvider
@@ -29,6 +30,7 @@ sensevoice_provider = SenseVoiceProvider()
 vosk_provider = VoskProvider()
 qwen_asr_provider = QwenASRProvider()
 fun_asr_provider = FunASRNanoProvider()
+openrouter_asr_provider = OpenRouterASRProvider()
 
 energy_vad_provider = EnergyVADProvider()
 webrtc_vad_provider = WebRTCVADProvider()
@@ -96,6 +98,12 @@ async def transcribe(
             text = vosk_provider.transcribe(pcm_bytes)
         elif "qwen" in model_key:
             text = qwen_asr_provider.transcribe(temp_path)
+        elif "openrouter" in model_key:
+            result = await openrouter_asr_provider.transcribe(temp_path, want_timestamps=want_timestamps)
+            text = result.get("text", "")
+            language = result.get("language", "zh")
+            segments = result.get("segments")
+            words = result.get("words")
         else:
             status_code = 400
             raise HTTPException(status_code=400, detail=f"Unsupported ASR model: {model}")

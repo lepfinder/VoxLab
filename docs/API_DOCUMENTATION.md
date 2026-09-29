@@ -45,8 +45,9 @@
 - **方法**: `POST`
 - **参数**:
   - `file`: 音频文件 (multipart/form-data)
-  - `model`: 模型 ID (`sensevoice`, `fun_asr_nano`, `qwen`, `vosk`，默认 `sensevoice`)
+  - `model`: 模型 ID (`sensevoice`, `fun_asr_nano`, `qwen`, `vosk`, `openrouter`，默认 `sensevoice`)
     - `fun_asr_nano`: Fun-ASR-Nano-2512（阿里通义 800M，方言/口音/歌词，默认 ModelScope hub）
+    - `openrouter`: 三方云端 ASR，转发至「系统配置 → 语音供应商」中配置的默认 ASR 供应商（如 OpenRouter whisper-1），需先在后台完成凭证配置
   - `response_format` (可选): 返回数据格式，默认为 `"json"`，保持 100% OpenAI 生态向后兼容。
     - `"json"`: 仅返回 `{"text": "..."}`。
     - `"verbose_json"`: 返回详细信息，包含识别语种 `language`、音频时长 `duration`、单句时间戳分段 `segments` (`[{id, start, end, text, words}]`) 及分词列表 `words`。
@@ -65,6 +66,13 @@
     -F "file=@audio.wav" \
     -F "model=fun_asr_nano"
   ```
+- **示例 (OpenRouter 云端 ASR)**:
+  ```bash
+  curl http://localhost:8001/api/v1/audio/transcriptions \
+    -H "Authorization: Bearer sk-your-token" \
+    -F "file=@audio.wav" \
+    -F "model=openrouter"
+  ```
 - **示例 (详细时间戳分段，供字幕软件使用)**:
   ```bash
   curl http://localhost:8001/api/v1/audio/transcriptions \
@@ -82,16 +90,23 @@
 - **路径**: `/api/v1/audio/speech`
 - **方法**: `POST`
 - **参数**:
-  - `model`: 模型 ID (`kokoro`, `qwen`, `voxcpm`, `omni`, `edge-tts`, `fun_cosyvoice3`)
+  - `model`: 模型 ID (`kokoro`, `qwen`, `voxcpm`, `omni`, `edge-tts`, `fun_cosyvoice3`, `openrouter`)
     - `fun_cosyvoice3`: Fun-CosyVoice3-0.5B（阿里通义 0.5B 流式克隆；需先 vendor CosyVoice 仓库，克隆时传 `ref_audio` + `ref_text`）
+    - `openrouter`: 三方云端 TTS，转发至「系统配置 → 语音供应商」中配置的默认 TTS 供应商，需先在后台完成凭证配置
   - `input`: 目标文本
   - `voice`: 发音人 ID / 音色名称（如 Kokoro 的 `am_nicole`，Edge TTS 的 `zh-CN-XiaoxiaoNeural` 等）
   - `response_format` (可选): 响应音频格式，默认为 `"mp3"`。
     - `"mp3"`: 返回 MP3 音频。若使用 `edge` 模型，将启用 Chunked 流式返回。
-    - `"pcm"`: 返回原始 16kHz PCM 音频流。支持 `edge` 和 `qwen` 模型进行流式返回（`StreamingResponse`）。
-    - `"opus"`: 返回低延迟 Opus 编码流，主要用于硬件连接（支持 `edge` 和 `qwen` 进行流式切片返回）。
+    - `"pcm"`: 返回原始 16kHz PCM 音频流。支持 `edge`、`qwen` 和 `openrouter` 模型进行流式返回（`StreamingResponse`）。
+    - `"opus"`: 返回低延迟 Opus 编码流，主要用于硬件连接（支持 `edge`、`qwen` 和 `openrouter` 进行流式切片返回）。
     - `"wav"`: 非流式，一次性生成并返回标准 WAV 格式。
   - `speed` (可选): 语速控制，默认为 `1.0`。
+  - `ref_audio` / `ref_text` (可选): 声音克隆的参考音频与对应文本，仅克隆类模型使用。
+  - `cache` (可选, 默认 `false`): 服务端试听缓存，**仅对 `openrouter` + `mp3` 生效**。
+    - 首次调用（MISS）：合成后将结果写入服务端缓存，并在本机安装 ffmpeg 时自动做响度归一化（目标 −16 LUFS），使云端音色与本地音色音量一致。
+    - 相同 `模型 + 音色 + 文本` 再次调用（HIT）：直接返回缓存文件，零上游开销。
+    - 响应头 `X-TTS-Cache` 标识命中情况（`HIT` / `MISS`）。
+- **音色记录覆盖引擎**: 当 `voice` 传入的是「音色管理」中已注册的音色 ID 时，系统会自动用该音色记录的 `tts_provider` 覆盖 `model`、用其底层参数覆盖 `voice`（OpenRouter 音色还会应用记录中的 TTS 模型名）。因此同一接口对本地与云端音色调用方式完全一致。
 - **示例 (非流式获取 WAV)**:
   ```bash
   curl http://localhost:8001/api/v1/audio/speech \
@@ -115,6 +130,19 @@
       "voice": "zh-CN-XiaoxiaoNeural",
       "response_format": "mp3"
     }' --no-buffer --output out.mp3
+  ```
+- **示例 (OpenRouter 云端合成 + 试听缓存)**:
+  ```bash
+  curl http://localhost:8001/api/v1/audio/speech \
+    -H "Authorization: Bearer sk-your-token" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openrouter",
+      "input": "你好，这是云端音色试听缓存测试。",
+      "voice": "alloy",
+      "response_format": "mp3",
+      "cache": true
+    }' --output preview.mp3
   ```
 
 ---
@@ -314,12 +342,12 @@
 
 ---
 
-## 7. 核心特性说明
+## 9. 核心特性说明
 
-### 7.1 内存自动管理
+### 9.1 内存自动管理
 系统内置了 **ModelManager**。模型在首次被调用时按需加载。如果 **10 分钟**内没有新的请求，模型将自动从显存/内存中卸载，确保不长时间占用系统资源。
 
-### 7.2 错误码参考
+### 9.2 错误码参考
 - `401 Unauthorized`: 未提供 Token 或 Token 无效。
 - `400 Bad Request`: 参数错误或不支持的模型类型。
 - `502 Upstream Error`: 开发模式下前端代理转发失败。

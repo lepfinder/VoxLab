@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Edit2, ShieldAlert, Sparkles, Globe, Music, Layers, AlertTriangle, FileText } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Plus, Trash2, Edit2, ShieldAlert, Sparkles, AlertTriangle, FileText, MoreHorizontal, Copy } from 'lucide-react';
 import VoicePreviewButton, { buildDefaultText } from './VoicePreviewButton';
 
 interface Voice {
@@ -10,11 +10,19 @@ interface Voice {
   description: string;
   tts_provider: string;
   tts_voice: string;
+  tts_model?: string | null;
   reference_audio?: string;
   language: string;
   preview_text?: string | null;
   is_preset: number;
 }
+
+const LANG_LABELS: Record<string, string> = {
+  zh: '中文',
+  en: '英文',
+  ja: '日文',
+  ko: '韩文',
+};
 
 export default function VoicesPage() {
   const [voices, setVoices] = useState<Voice[]>([]);
@@ -23,6 +31,28 @@ export default function VoicesPage() {
   const [editingVoice, setEditingVoice] = useState<Voice | null>(null);
   const [deletingVoice, setDeletingVoice] = useState<Voice | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [copiedToast, setCopiedToast] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  // 卡片 "..." 菜单：点击外部 / ESC 关闭
+  useEffect(() => {
+    if (!menuOpenId) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpenId(null);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpenId(null);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpenId]);
 
   // Form states
   const [name, setName] = useState('');
@@ -30,6 +60,7 @@ export default function VoicesPage() {
   const [ttsProvider, setTtsProvider] = useState('kokoro');
   const [voiceType, setVoiceType] = useState<'standard' | 'clone'>('clone');
   const [ttsVoiceParam, setTtsVoiceParam] = useState('');
+  const [ttsModel, setTtsModel] = useState('');
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [language, setLanguage] = useState('zh');
   const [previewText, setPreviewText] = useState('');
@@ -57,6 +88,7 @@ export default function VoicesPage() {
     setTtsProvider('kokoro');
     setVoiceType('clone');
     setTtsVoiceParam('');
+    setTtsModel('');
     setReferenceFile(null);
     setLanguage('zh');
     setPreviewText('');
@@ -73,6 +105,7 @@ export default function VoicesPage() {
     const isCloned = v.tts_voice === 'clone' || !!v.reference_audio;
     setVoiceType(isCloned ? 'clone' : 'standard');
     setTtsVoiceParam(isCloned ? '' : v.tts_voice);
+    setTtsModel(v.tts_model || '');
     setReferenceFile(null);
     setLanguage(v.language || 'zh');
     setPreviewText(v.preview_text || '');
@@ -106,6 +139,9 @@ export default function VoicesPage() {
     formData.append('tts_voice', voiceType === 'clone' ? 'clone' : ttsVoiceParam);
     formData.append('language', language);
     formData.append('preview_text', previewText.trim());
+    if (ttsProvider === 'openrouter' && voiceType === 'standard') {
+      formData.append('tts_model', ttsModel.trim());
+    }
     if (referenceFile) {
       formData.append('file', referenceFile);
     }
@@ -131,6 +167,51 @@ export default function VoicesPage() {
 
   const handleClickDelete = (v: Voice) => {
     setDeletingVoice(v);
+  };
+
+  /** 复制音色基础参数 + OpenAI 兼容接口调用示例，供第三方直接接入 */
+  const handleCopyUsage = async (v: Voice) => {
+    const sampleText = (v.preview_text || '').trim() || buildDefaultText(v.language || 'zh', v.name);
+    const body: Record<string, string | boolean> = {
+      model: v.tts_provider,
+      voice: v.id,
+      input: sampleText,
+      response_format: "mp3",
+    };
+    if (v.tts_provider === 'openrouter') body.cache = true;
+    const lines = [
+      `【音色】${v.name}`,
+      v.description ? `简介: ${v.description}` : null,
+      `音色 ID (voice): ${v.id}`,
+      `引擎 (model): ${v.tts_provider}`,
+      v.tts_model ? `TTS 模型: ${v.tts_model}` : null,
+      `底层音色参数: ${v.tts_voice}`,
+      `语言: ${v.language || 'zh'}`,
+      '',
+      '【调用示例】voice 直接传音色 ID，服务端自动路由到底层引擎',
+      'curl http://localhost:8001/api/v1/audio/speech \\',
+      '  -H "Authorization: Bearer <YOUR_TOKEN>" \\',
+      '  -H "Content-Type: application/json" \\',
+      `  -d '${JSON.stringify(body, null, 2)}' \\`,
+      '  --output voice.mp3',
+      '',
+      '接口详情见管理后台「API 文档 → 3. 语音合成 (TTS) 接口」，Token 在「Token 管理」生成',
+    ].filter((l): l is string => l !== null);
+    const text = lines.join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    setCopiedToast(true);
+    setTimeout(() => setCopiedToast(false), 2000);
   };
 
   const confirmDelete = async () => {
@@ -176,68 +257,84 @@ export default function VoicesPage() {
       {loading ? (
         <div className="text-center py-12 text-[var(--muted-text)]">加载中...</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {voices.map((v) => (
             <div
               key={v.id}
-              className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 flex flex-col justify-between hover:border-blue-500/30 hover:shadow-lg transition-all duration-300 relative group overflow-hidden"
+              className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-4 flex flex-col hover:border-blue-500/30 transition-colors relative"
             >
-              <div>
-                <div className="flex items-center gap-3 mb-3">
-                  <VoicePreviewButton
-                    voice={v}
-                    defaultText={buildDefaultText(v.language || 'zh', v.name)}
-                  />
-                  <div className="min-w-0">
-                    <h3 className="font-semibold text-lg truncate">{v.name}</h3>
-                    <p className="text-xs text-[var(--muted-text)] line-clamp-1">{v.description || '暂无描述'}</p>
-                  </div>
+              <div className="flex items-start gap-3">
+                <VoicePreviewButton
+                  voice={v}
+                  defaultText={buildDefaultText(v.language || 'zh', v.name)}
+                />
+                <div className="min-w-0 flex-1 pt-0.5">
+                  <h3 className="font-semibold truncate">{v.name}</h3>
+                  <p className="text-xs text-[var(--muted-text)] line-clamp-1">{v.description || '暂无描述'}</p>
                 </div>
-
-                <div className="space-y-2 my-4 text-xs">
-                  <div className="flex flex-col gap-1.5 font-mono text-[10px] text-[var(--muted-text)]">
-                    <span className="flex items-center gap-1">
-                      <Layers size={12} className="opacity-70" />
-                      <strong>服务商:</strong> {v.tts_provider}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Music size={12} className="opacity-70" />
-                      <strong>底层参数/ID:</strong> {v.tts_voice}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Globe size={12} className="opacity-70" />
-                      <strong>语言:</strong> {v.language === 'zh' ? '中文 (zh)' : v.language === 'en' ? '英文 (en)' : v.language}
-                    </span>
-                    {v.reference_audio && (
-                      <span className="bg-purple-500/5 text-purple-600 dark:text-purple-400 px-2 py-1 rounded w-fit mt-1 break-all line-clamp-2">
-                        克隆参考文件: {v.reference_audio}
-                      </span>
-                    )}
-                  </div>
-                  {(v.preview_text || '').trim() && (
-                    <div className="flex items-start gap-1 text-[10px] text-[var(--muted-text)] bg-amber-500/5 text-amber-700 dark:text-amber-400 px-2 py-1.5 rounded mt-2 font-sans">
-                      <FileText size={11} className="opacity-70 mt-0.5 shrink-0" />
-                      <span className="line-clamp-2">试听文本: {v.preview_text}</span>
+                <div ref={menuOpenId === v.id ? menuRef : undefined} className="relative shrink-0">
+                  <button
+                    onClick={() => setMenuOpenId(menuOpenId === v.id ? null : v.id)}
+                    title="更多操作"
+                    className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${
+                      menuOpenId === v.id
+                        ? 'bg-[var(--foreground)]/10 text-[var(--foreground)]'
+                        : 'text-[var(--muted-text)] hover:bg-[var(--foreground)]/5 hover:text-[var(--foreground)]'
+                    }`}
+                  >
+                    <MoreHorizontal size={16} />
+                  </button>
+                  {menuOpenId === v.id && (
+                    <div className="absolute right-0 top-8 z-30 w-28 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-xl py-1">
+                      <button
+                        onClick={() => { setMenuOpenId(null); handleOpenEdit(v); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--foreground)]/5 transition-colors"
+                      >
+                        <Edit2 size={13} />
+                        编辑
+                      </button>
+                      <button
+                        onClick={() => { setMenuOpenId(null); handleCopyUsage(v); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--foreground)]/5 transition-colors"
+                      >
+                        <Copy size={13} />
+                        复制
+                      </button>
+                      <button
+                        onClick={() => { setMenuOpenId(null); handleClickDelete(v); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-red-500/10 transition-colors"
+                      >
+                        <Trash2 size={13} />
+                        删除
+                      </button>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="flex gap-2 border-t border-[var(--card-border)] pt-4 mt-2">
-                <button
-                  onClick={() => handleOpenEdit(v)}
-                  className="flex-1 py-2 bg-[var(--background)] hover:bg-[var(--card-border)] border border-[var(--card-border)] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95"
-                >
-                  <Edit2 size={13} />
-                  编辑
-                </button>
-                <button
-                  onClick={() => handleClickDelete(v)}
-                  className="flex-1 py-2 bg-[var(--background)] hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-500 border border-[var(--card-border)] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95 text-[var(--muted-text)]"
-                >
-                  <Trash2 size={13} />
-                  删除
-                </button>
+              <div className="mt-3 space-y-1 text-[11px] text-[var(--muted-text)]">
+                <div className="flex gap-1.5 min-w-0">
+                  <span className="shrink-0 font-semibold">服务商:</span>
+                  <span className="font-mono truncate" title={`${v.tts_provider}${v.tts_model ? ` · ${v.tts_model}` : ''}`}>
+                    {v.tts_provider}{v.tts_model ? ` · ${v.tts_model}` : ''}
+                  </span>
+                </div>
+                <div className="flex gap-1.5 min-w-0">
+                  <span className="shrink-0 font-semibold">底层参数/ID:</span>
+                  <span className="font-mono truncate" title={v.tts_voice}>{v.tts_voice}</span>
+                </div>
+                <div className="flex gap-1.5">
+                  <span className="shrink-0 font-semibold">语言:</span>
+                  <span>
+                    {LANG_LABELS[v.language] || v.language}{v.language && LANG_LABELS[v.language] ? ` (${v.language})` : ''}
+                    {v.reference_audio && <span className="ml-2 text-purple-500">克隆</span>}
+                    {(v.preview_text || '').trim() && (
+                      <span title="已配置试听文本" className="inline-flex ml-2 opacity-70 align-middle">
+                        <FileText size={10} />
+                      </span>
+                    )}
+                  </span>
+                </div>
               </div>
             </div>
           ))}
@@ -341,6 +438,7 @@ export default function VoicesPage() {
                     <option value="qwen">Qwen TTS</option>
                     <option value="voxcpm">VoxCPM</option>
                     <option value="omni">OmniVoice</option>
+                    <option value="openrouter">OpenRouter</option>
                   </select>
                 </div>
 
@@ -362,18 +460,37 @@ export default function VoicesPage() {
               </div>
 
               {voiceType === 'standard' ? (
-                <div>
-                  <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider">
-                    底层音色参数名 *
-                  </label>
-                  <input
-                    type="text"
-                    required={voiceType === 'standard'}
-                    placeholder="如 am_nicole, zh-CN-YunxiNeural 等"
-                    value={ttsVoiceParam}
-                    onChange={(e) => setTtsVoiceParam(e.target.value)}
-                    className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  />
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider">
+                      底层音色参数名 *
+                    </label>
+                    <input
+                      type="text"
+                      required={voiceType === 'standard'}
+                      placeholder="如 am_nicole, zh-CN-YunxiNeural, alloy 等"
+                      value={ttsVoiceParam}
+                      onChange={(e) => setTtsVoiceParam(e.target.value)}
+                      className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+                  {ttsProvider === 'openrouter' && (
+                    <div>
+                      <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider">
+                        TTS 模型
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="如 openai/gpt-4o-mini-tts，留空则用语音供应商默认模型"
+                        value={ttsModel}
+                        onChange={(e) => setTtsModel(e.target.value)}
+                        className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      />
+                      <p className="text-[10px] text-[var(--muted-text)] mt-1.5">
+                        OpenRouter 音色与模型绑定（不同模型的音色列表不同），请确认该音色属于此模型
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div>
@@ -464,6 +581,11 @@ export default function VoicesPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {copiedToast && (
+        <div className="fixed bottom-6 right-6 z-[60] bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm shadow-xl">
+          已复制音色参数与 API 调用示例
         </div>
       )}
     </div>

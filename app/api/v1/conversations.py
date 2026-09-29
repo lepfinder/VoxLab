@@ -152,6 +152,76 @@ async def list_config_models(cfg_id: str):
     return {"models": models}
 
 
+# ---------------- Voice Provider Configs (三方 ASR/TTS 供应商) ----------------
+
+class VoiceProviderUpsert(BaseModel):
+    id: Optional[str] = None
+    capability: str  # asr | tts
+    provider: str = "openrouter"
+    name: str
+    base_url: str
+    api_key: str
+    model: str
+    voice: Optional[str] = None
+    enabled: Optional[bool] = True
+    is_default: Optional[bool] = False
+
+
+class VoiceProviderTest(BaseModel):
+    base_url: str
+    api_key: str
+
+
+@router.get("/voice-providers")
+async def list_voice_providers(capability: Optional[str] = None):
+    return db.list_voice_provider_configs(capability)
+
+
+@router.post("/voice-providers")
+async def save_voice_provider(req: VoiceProviderUpsert):
+    if req.capability not in ("asr", "tts"):
+        raise HTTPException(status_code=400, detail="capability 必须为 asr 或 tts")
+    cfg_id = req.id or str(uuid.uuid4())
+    try:
+        saved = db.save_voice_provider_config(
+            cfg_id, req.capability, req.provider, req.name,
+            req.base_url, req.api_key, req.model, req.voice,
+            bool(req.enabled if req.enabled is not None else True),
+            bool(req.is_default),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    saved["api_key"] = db._mask_api_key(saved["api_key"])
+    return saved
+
+
+@router.delete("/voice-providers/{cfg_id}")
+async def delete_voice_provider(cfg_id: str):
+    db.delete_voice_provider_config(cfg_id)
+    return {"ok": True}
+
+
+@router.post("/voice-providers/test")
+async def test_voice_provider(req: VoiceProviderTest):
+    """连通性测试：调用上游 /v1/models 验证 base_url + api_key。"""
+    import httpx
+    base = req.base_url.rstrip("/")
+    models_url = f"{base}/models" if (base.endswith("/v1") or "/v1/" in base) else f"{base}/v1/models"
+    key = req.api_key
+    # 编辑态回显的是脱敏占位，需要用已存库中的真实 key（仅当带 id 保存过时才可能；测试按钮在保存后使用）
+    if "•" in key:
+        raise HTTPException(status_code=400, detail="请先填入完整 API Key 再测试")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(models_url, headers={"Authorization": f"Bearer {key}"})
+            if resp.status_code == 200:
+                data = resp.json().get("data", [])
+                return {"ok": True, "model_count": len(data)}
+            return {"ok": False, "error": f"HTTP {resp.status_code}: {resp.text[:200]}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 # ---------------- Speakers (发音人) ----------------
 
 class SpeakerUpsert(BaseModel):
@@ -208,6 +278,7 @@ async def save_custom_voice(
     tts_voice: str = Form(...),
     language: Optional[str] = Form("zh"),
     preview_text: Optional[str] = Form(""),
+    tts_model: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None)
 ):
     import os
@@ -241,7 +312,8 @@ async def save_custom_voice(
         tts_voice=tts_voice,
         reference_audio=reference_audio_path,
         language=language,
-        preview_text=preview_text or None
+        preview_text=preview_text or None,
+        tts_model=tts_model or None
     )
     return saved
 

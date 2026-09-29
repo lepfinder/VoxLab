@@ -7,6 +7,8 @@ import io
 import os
 import uuid
 import time
+import shutil
+import subprocess
 import tempfile
 import struct
 import logging
@@ -24,6 +26,7 @@ from app.providers.tts.qwen_tts_provider import QwenTTSProvider
 from app.providers.tts.omni_provider import OmniVoiceProvider
 from app.providers.tts.voxcpm_provider import VoxCPMProvider
 from app.providers.tts.cosyvoice_provider import CosyVoiceProvider
+from app.providers.tts.openrouter_tts_provider import OpenRouterTTSProvider
 
 router = APIRouter(prefix="/api/v1/audio")
 logger = logging.getLogger(__name__)
@@ -33,6 +36,35 @@ edge_tts_provider = EdgeTTSProvider()
 omni_provider = OmniVoiceProvider()
 voxcpm_provider = VoxCPMProvider()
 cosyvoice_provider = CosyVoiceProvider()
+openrouter_tts_provider = OpenRouterTTSProvider()
+
+
+def _normalize_cache_loudness(path: str) -> None:
+    """云端 TTS 响度偏保守，写缓存时用 ffmpeg loudnorm 归一到 -16 LUFS。
+    未安装 ffmpeg 或失败时保留原始文件，不影响可用性。"""
+    if not shutil.which("ffmpeg"):
+        return
+    tmp_path = path + ".norm.mp3"
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                "-i", path,
+                "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+                "-codec:a", "libmp3lame", "-q:a", "4",
+                tmp_path,
+            ],
+            capture_output=True, text=True, timeout=60,
+        )
+        if result.returncode == 0 and os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 0:
+            os.replace(tmp_path, path)
+        else:
+            logger.warning(f"[TTS] loudnorm 归一化失败，保留原始音频: {result.stderr[:200]}")
+    except Exception as e:
+        logger.warning(f"[TTS] loudnorm 归一化异常，保留原始音频: {e}")
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 
 @router.post("/speech")
@@ -48,6 +80,8 @@ async def speech(request_body: SpeechRequest, request: Request):
 
     request.state.model_name = request_body.model
     model_key = request_body.model.lower()
+    # 音色级模型覆盖（如 OpenRouter 音色挂在不同 TTS 模型下）
+    tts_model_override = voice_info.get("tts_model") if voice_info else None
     output_path = None
     temp_ref_path = None
     # 标记 temp_ref_path 是否为临时文件（base64 解码生成），结束时需清理；
@@ -117,6 +151,37 @@ async def speech(request_body: SpeechRequest, request: Request):
     logger.info(f"[TTS] Model: {request_body.model}, Format: {request_body.response_format}, Text: {request_body.input[:50]}...")
 
     try:
+        # ── 服务端试听缓存（仅 OpenRouter mp3，客户端 cache=true 显式开启）──────────
+        if request_body.cache and request_body.response_format == "mp3" and "openrouter" in model_key:
+            import hashlib
+            from config import DATA_DIR
+            cache_key = hashlib.sha1(
+                f"openrouter|{tts_model_override or ''}|{request_body.voice}|{request_body.input}".encode()
+            ).hexdigest()
+            cache_dir = os.path.join(DATA_DIR, "tts_cache")
+            os.makedirs(cache_dir, exist_ok=True)
+            cache_path = os.path.join(cache_dir, f"{cache_key}.mp3")
+            headers = {"X-Model-Name": request_body.model}
+            if os.path.exists(cache_path) and os.path.getsize(cache_path) > 0:
+                headers["X-TTS-Cache"] = "HIT"
+                _log_tts(time.time() - tts_start_time, 200)
+                response = FileResponse(cache_path, media_type="audio/mpeg", headers=headers)
+                return response
+            buf = b""
+            async for chunk in openrouter_tts_provider.stream_bytes(
+                request_body.input, request_body.voice, "mp3", model=tts_model_override
+            ):
+                buf += chunk
+            if not buf:
+                raise HTTPException(status_code=502, detail="OpenRouter 返回空音频，未写入缓存")
+            with open(cache_path, "wb") as cf:
+                cf.write(buf)
+            _normalize_cache_loudness(cache_path)
+            headers["X-TTS-Cache"] = "MISS"
+            _log_tts(time.time() - tts_start_time, 200)
+            response = FileResponse(cache_path, media_type="audio/mpeg", headers=headers)
+            return response
+
         # ── Opus 流式格式（对接硬件）──────────────────────────────────────────
         if request_body.response_format == "opus":
             async def opus_stream():
@@ -167,6 +232,10 @@ async def speech(request_body: SpeechRequest, request: Request):
                             yield opus_packet
                 elif "edge" in model_key:
                     async for chunk in edge_tts_provider.stream_generate(request_body.input, request_body.voice):
+                        async for opus_packet in process_pcm_chunk(chunk):
+                            yield opus_packet
+                elif "openrouter" in model_key:
+                    async for chunk in openrouter_tts_provider.stream_generate(request_body.input, request_body.voice, model=tts_model_override):
                         async for opus_packet in process_pcm_chunk(chunk):
                             yield opus_packet
                 else:
@@ -304,6 +373,20 @@ async def speech(request_body: SpeechRequest, request: Request):
                 ref_audio=temp_ref_path,
                 ref_text=request_body.ref_text,
             )
+        elif "openrouter" in model_key:
+            if request_body.response_format == "pcm":
+                response = StreamingResponse(
+                    log_wrap(openrouter_tts_provider.stream_generate(request_body.input, request_body.voice, model=tts_model_override)),
+                    media_type="audio/pcm",
+                    headers={"X-Model-Name": request_body.model}
+                )
+                return response
+            response = StreamingResponse(
+                log_wrap(openrouter_tts_provider.stream_bytes(request_body.input, request_body.voice, "mp3", model=tts_model_override)),
+                media_type="audio/mpeg",
+                headers={"X-Model-Name": request_body.model}
+            )
+            return response
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported model: {request_body.model}")
 

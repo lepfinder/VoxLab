@@ -19,32 +19,43 @@ async def get_stats():
 
 @router.get("/models")
 async def get_models():
-    # 动态返回支持的模型及其元数据
+    # 动态返回支持的模型及其元数据（本地清单 + 已启用的三方语音供应商）
+    asr_models = ["sensevoice", "qwen", "vosk"]
+    tts_models = [
+        {
+            "id": "kokoro",
+            "voices": ["serena", "vivian", "uncle_fu", "ryan", "aiden", "ono_anna", "sohee", "eric", "dylan"]
+        },
+        {
+            "id": "qwen",
+            "voices": ["serena", "vivian", "uncle_fu", "ryan", "aiden", "ono_anna", "sohee", "eric", "dylan"]
+        },
+        {
+            "id": "voxcpm",
+            "voices": ["default"]
+        },
+        {
+            "id": "omni",
+            "voices": ["default"]
+        },
+        {
+            "id": "edge-tts",
+            "voices": ["zh-CN-XiaoxiaoNeural", "zh-CN-YunxiNeural", "en-US-GuyNeural"]
+        }
+    ]
+    asr_cfg = db.get_default_voice_provider_config("asr")
+    if asr_cfg:
+        asr_models.append(asr_cfg["provider"])
+    tts_cfg = db.get_default_voice_provider_config("tts")
+    if tts_cfg:
+        tts_models.append({
+            "id": tts_cfg["provider"],
+            "voices": [tts_cfg.get("voice") or "default"]
+        })
     return {
         "audio": {
-            "asr": ["sensevoice", "qwen", "vosk"],
-            "tts": [
-                {
-                    "id": "kokoro",
-                    "voices": ["serena", "vivian", "uncle_fu", "ryan", "aiden", "ono_anna", "sohee", "eric", "dylan"]
-                },
-                {
-                    "id": "qwen",
-                    "voices": ["serena", "vivian", "uncle_fu", "ryan", "aiden", "ono_anna", "sohee", "eric", "dylan"]
-                },
-                {
-                    "id": "voxcpm",
-                    "voices": ["default"]
-                },
-                {
-                    "id": "omni",
-                    "voices": ["default"]
-                },
-                {
-                    "id": "edge-tts",
-                    "voices": ["zh-CN-XiaoxiaoNeural", "zh-CN-YunxiNeural", "en-US-GuyNeural"]
-                }
-            ]
+            "asr": asr_models,
+            "tts": tts_models
         }
     }
 

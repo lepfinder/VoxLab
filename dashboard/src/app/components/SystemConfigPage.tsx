@@ -10,15 +10,17 @@ import {
   Sun,
   Moon,
   Check,
-  Server
+  Server,
+  Mic
 } from 'lucide-react';
 
 import Tokens from './Tokens';
 import Logs from './Logs';
 import LLMConfigPage from './LLMConfigPage';
+import VoiceProvidersPage from './VoiceProvidersPage';
 import ModelsTab from './ModelsTab';
 
-export type SystemConfigTab = 'general' | 'tokens' | 'logs' | 'llm' | 'models';
+export type SystemConfigTab = 'general' | 'tokens' | 'logs' | 'llm' | 'voice-providers' | 'models';
 
 interface Props {
   tokens: any[];
@@ -34,6 +36,7 @@ const TABS: { id: SystemConfigTab; label: string; icon: any }[] = [
   { id: 'tokens', label: 'API-Token 管理', icon: Key },
   { id: 'logs', label: '调用日志', icon: History },
   { id: 'llm', label: 'LLM 配置', icon: Bot },
+  { id: 'voice-providers', label: '语音供应商', icon: Mic },
   { id: 'models', label: '模型管理', icon: Server },
 ];
 
@@ -91,6 +94,7 @@ export default function SystemConfigPage({
           )}
           {activeTab === 'logs' && <Logs />}
           {activeTab === 'llm' && <LLMConfigPage embedded />}
+          {activeTab === 'voice-providers' && <VoiceProvidersPage />}
           {activeTab === 'models' && <ModelsTab />}
         </div>
       </div>

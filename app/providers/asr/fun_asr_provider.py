@@ -49,24 +49,46 @@ class FunASRNanoProvider(BaseProvider):
 
     def transcribe(
         self,
-        audio_data: np.ndarray,
+        audio_data,
         language: str = "中文",
         hotwords: list | None = None,
         output_timestamp: bool = False,
     ) -> dict:
+        """audio_data 可为 16k float32 ndarray，或可读音频文件路径。"""
         model = model_manager.get_model(self.model_id, self.load)
 
-        gen_kwargs = {
-            "input": audio_data,
-            "cache": {},
-            "language": language or "中文",
-            "itn": True,
-            "batch_size_s": 60,
-        }
-        if hotwords:
-            gen_kwargs["hotwords"] = hotwords
+        temp_path = None
+        try:
+            if isinstance(audio_data, (str, os.PathLike)):
+                audio_input = str(audio_data)
+            else:
+                import soundfile as sf
+                import tempfile
 
-        res = model.generate(**gen_kwargs)
+                arr = np.asarray(audio_data, dtype=np.float32).reshape(-1)
+                fd, temp_path = tempfile.mkstemp(suffix=".wav")
+                os.close(fd)
+                sf.write(temp_path, arr, 16000)
+                audio_input = temp_path
+
+            gen_kwargs = {
+                "input": [audio_input],
+                "cache": {},
+                "language": language or "中文",
+                "itn": True,
+                "batch_size_s": 60,
+            }
+            if hotwords:
+                gen_kwargs["hotwords"] = hotwords
+
+            res = model.generate(**gen_kwargs)
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
+
         if not res:
             return {
                 "text": "",
@@ -110,48 +132,80 @@ class FunASRNanoProvider(BaseProvider):
 
     @staticmethod
     def _extract_timestamps(item: dict) -> tuple[list | None, list | None]:
-        """从 FunASR 结果中整理 segments / words；无时间戳时返回 (None, None)。"""
-        sentence_info = item.get("sentence_info")
-        if sentence_info:
-            segments = []
-            for i, sent in enumerate(sentence_info):
-                start_ms = sent.get("start")
-                end_ms = sent.get("end")
-                seg_text = (sent.get("sentence") or sent.get("text") or "").strip()
-                if start_ms is None or end_ms is None or not seg_text:
-                    continue
-                segments.append(
-                    {
-                        "id": i,
-                        "seek": int(start_ms / 10),
-                        "start": round(start_ms / 1000.0, 3),
-                        "end": round(end_ms / 1000.0, 3),
-                        "text": seg_text,
-                    }
-                )
-            if segments:
-                return segments, None
+        """从 FunASR-Nano 结果整理 segments / words。
 
-        raw_ts = item.get("timestamp")
+        优先使用 CTC 字级时间戳（秒），按标点/停顿聚合成句。
+        """
+        tokens = item.get("timestamps") or item.get("ctc_timestamps")
         full_text = (item.get("text") or "").strip()
-        if raw_ts and full_text:
-            # 仅有整体 timestamp 列表、无对齐词表时，合成单 segment
-            try:
-                start_s = float(raw_ts[0][0]) / 1000.0
-                end_s = float(raw_ts[-1][1]) / 1000.0
+        if not tokens:
+            # 兜底：无字级时间戳时返回整段
+            if full_text:
                 return (
-                    [
-                        {
-                            "id": 0,
-                            "seek": int(start_s * 100),
-                            "start": round(start_s, 3),
-                            "end": round(end_s, 3),
-                            "text": full_text,
-                        }
-                    ],
+                    [{"id": 0, "seek": 0, "start": 0.0, "end": 0.0, "text": full_text}],
                     None,
                 )
-            except Exception:
-                return None, None
+            return None, None
 
-        return None, None
+        words = []
+        for t in tokens:
+            token = str(t.get("token") or "").strip()
+            if not token:
+                continue
+            start = t.get("start_time", t.get("start"))
+            end = t.get("end_time", t.get("end"))
+            if start is None or end is None:
+                continue
+            # funasr fun_asr_nano 的 start/end 已是秒
+            words.append(
+                {
+                    "word": token,
+                    "start": round(float(start), 3),
+                    "end": round(float(end), 3),
+                }
+            )
+
+        if not words:
+            return None, None
+
+        hard_break = set("。！？!?；;\n")
+        soft_break = set("，,、")
+        segments = []
+        curr = []
+        seg_start = None
+        seg_end = None
+        idx = 0
+
+        for i, w in enumerate(words):
+            if seg_start is None:
+                seg_start = w["start"]
+            seg_end = w["end"]
+            curr.append(w)
+
+            is_hard = any(p in w["word"] for p in hard_break)
+            is_soft = any(p in w["word"] for p in soft_break) and len(curr) >= 8
+            is_pause = False
+            if i < len(words) - 1:
+                gap = words[i + 1]["start"] - w["end"]
+                if gap >= 0.8 and len(curr) >= 4:
+                    is_pause = True
+
+            if is_hard or is_soft or is_pause or i == len(words) - 1:
+                text = "".join(c["word"] for c in curr).strip()
+                if text:
+                    segments.append(
+                        {
+                            "id": idx,
+                            "seek": int(seg_start * 100),
+                            "start": seg_start,
+                            "end": seg_end,
+                            "text": text,
+                            "words": curr,
+                        }
+                    )
+                    idx += 1
+                curr = []
+                seg_start = None
+                seg_end = None
+
+        return segments or None, words

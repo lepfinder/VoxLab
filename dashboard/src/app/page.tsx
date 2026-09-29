@@ -48,7 +48,7 @@ const PAGE_TITLES: Record<string, string> = {
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('overview');
-  const [systemConfigTab, setSystemConfigTab] = useState<'general' | 'tokens' | 'logs' | 'llm' | 'models'>('general');
+  const [systemConfigTab, setSystemConfigTab] = useState<'general' | 'tokens' | 'logs' | 'llm' | 'voice-providers' | 'models'>('general');
   const [tokens, setTokens] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [stats, setStats] = useState({ count: 0, tokens: 0 });

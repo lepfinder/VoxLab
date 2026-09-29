@@ -41,3 +41,4 @@ class SpeechRequest(BaseModel):
     instruct: Optional[str] = None
     ref_audio: Optional[str] = None
     ref_text: Optional[str] = None
+    cache: Optional[bool] = False
