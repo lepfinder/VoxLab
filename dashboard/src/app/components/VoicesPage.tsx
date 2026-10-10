@@ -14,6 +14,9 @@ interface Voice {
   reference_audio?: string;
   language: string;
   preview_text?: string | null;
+  gender?: string | null;
+  ref_text?: string | null;
+  instruct?: string | null;
   is_preset: number;
 }
 
@@ -23,6 +26,22 @@ const LANG_LABELS: Record<string, string> = {
   ja: '日文',
   ko: '韩文',
 };
+
+const CLONE_PROVIDERS = [
+  { id: 'qwen', label: 'Qwen TTS (推荐，支持台词对齐与语气指令)' },
+  { id: 'cosyvoice', label: 'Fun-CosyVoice3 (0.5B 极速零样本克隆)' },
+  { id: 'voxcpm', label: 'VoxCPM (情感控制克隆)' },
+  { id: 'omni', label: 'OmniVoice (基础多模态)' },
+];
+
+const STANDARD_PROVIDERS = [
+  { id: 'edge', label: 'Edge TTS (微软云端免费，高拟真度)' },
+  { id: 'qwen', label: 'Qwen TTS (通义千问内置预设声音)' },
+  { id: 'kokoro', label: 'Kokoro (轻量预置声音)' },
+  { id: 'openrouter', label: 'OpenRouter (第三方云端 TTS API)' },
+  { id: 'voxcpm', label: 'VoxCPM (内置音色)' },
+  { id: 'omni', label: 'OmniVoice (内置音色)' },
+];
 
 export default function VoicesPage() {
   const [voices, setVoices] = useState<Voice[]>([]);
@@ -57,13 +76,18 @@ export default function VoicesPage() {
   // Form states
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [ttsProvider, setTtsProvider] = useState('kokoro');
+  const [ttsProvider, setTtsProvider] = useState('qwen');
   const [voiceType, setVoiceType] = useState<'standard' | 'clone'>('clone');
   const [ttsVoiceParam, setTtsVoiceParam] = useState('');
   const [ttsModel, setTtsModel] = useState('');
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
+  const [refAudioPreviewUrl, setRefAudioPreviewUrl] = useState<string | null>(null);
+  const [isTranscribingRef, setIsTranscribingRef] = useState(false);
   const [language, setLanguage] = useState('zh');
+  const [gender, setGender] = useState('female');
   const [previewText, setPreviewText] = useState('');
+  const [refText, setRefText] = useState('');
+  const [instruct, setInstruct] = useState('');
 
   const fetchVoices = async () => {
     try {
@@ -85,13 +109,19 @@ export default function VoicesPage() {
     setEditingVoice(null);
     setName('');
     setDescription('');
-    setTtsProvider('kokoro');
+    setTtsProvider('qwen');
     setVoiceType('clone');
     setTtsVoiceParam('');
     setTtsModel('');
     setReferenceFile(null);
+    if (refAudioPreviewUrl) URL.revokeObjectURL(refAudioPreviewUrl);
+    setRefAudioPreviewUrl(null);
+    setIsTranscribingRef(false);
     setLanguage('zh');
+    setGender('female');
     setPreviewText('');
+    setRefText('');
+    setInstruct('A clear and natural speech.');
     setShowModal(true);
   };
 
@@ -99,17 +129,55 @@ export default function VoicesPage() {
     setEditingVoice(v);
     setName(v.name);
     setDescription(v.description || '');
-    setTtsProvider(v.tts_provider);
-
-    // Check if it's cloned voice
     const isCloned = v.tts_voice === 'clone' || !!v.reference_audio;
     setVoiceType(isCloned ? 'clone' : 'standard');
+    setTtsProvider(v.tts_provider);
     setTtsVoiceParam(isCloned ? '' : v.tts_voice);
     setTtsModel(v.tts_model || '');
     setReferenceFile(null);
+    if (refAudioPreviewUrl) URL.revokeObjectURL(refAudioPreviewUrl);
+    setRefAudioPreviewUrl(null);
+    setIsTranscribingRef(false);
     setLanguage(v.language || 'zh');
+    setGender(v.gender || '');
     setPreviewText(v.preview_text || '');
+    setRefText(v.ref_text || '');
+    setInstruct(v.instruct || '');
     setShowModal(true);
+  };
+
+  const handleRefAudioFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      setReferenceFile(file);
+      if (refAudioPreviewUrl) URL.revokeObjectURL(refAudioPreviewUrl);
+      setRefAudioPreviewUrl(URL.createObjectURL(file));
+
+      // 若尚未填写台词，使用 SenseVoice 自动转写参考音频
+      if (!refText.trim()) {
+        setIsTranscribingRef(true);
+        try {
+          const fd = new FormData();
+          fd.append('file', file);
+          fd.append('model', 'sensevoice');
+          const res = await fetch('/api/v1/audio/transcriptions', { method: 'POST', body: fd });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.text) setRefText(data.text);
+          }
+        } catch (err) {
+          console.error('Auto ASR failed:', err);
+        } finally {
+          setIsTranscribingRef(false);
+        }
+      }
+    } else {
+      setReferenceFile(null);
+      if (refAudioPreviewUrl) {
+        URL.revokeObjectURL(refAudioPreviewUrl);
+        setRefAudioPreviewUrl(null);
+      }
+    }
   };
 
   const handleSaveVoice = async (e: React.FormEvent) => {
@@ -139,6 +207,11 @@ export default function VoicesPage() {
     formData.append('tts_voice', voiceType === 'clone' ? 'clone' : ttsVoiceParam);
     formData.append('language', language);
     formData.append('preview_text', previewText.trim());
+    formData.append('gender', gender);
+    if (voiceType === 'clone') {
+      formData.append('ref_text', refText.trim());
+      formData.append('instruct', instruct.trim());
+    }
     if (ttsProvider === 'openrouter' && voiceType === 'standard') {
       formData.append('tts_model', ttsModel.trim());
     }
@@ -327,7 +400,17 @@ export default function VoicesPage() {
                   <span className="shrink-0 font-semibold">语言:</span>
                   <span>
                     {LANG_LABELS[v.language] || v.language}{v.language && LANG_LABELS[v.language] ? ` (${v.language})` : ''}
-                    {v.reference_audio && <span className="ml-2 text-purple-500">克隆</span>}
+                    {v.reference_audio && <span className="ml-2 font-medium text-purple-500">克隆</span>}
+                    {v.ref_text && (
+                      <span title={`参考台词: ${v.ref_text}`} className="ml-1 text-[10px] px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-400">
+                        台词
+                      </span>
+                    )}
+                    {v.instruct && (
+                      <span title={`语气指令: ${v.instruct}`} className="ml-1 text-[10px] px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-400">
+                        指令
+                      </span>
+                    )}
                     {(v.preview_text || '').trim() && (
                       <span title="已配置试听文本" className="inline-flex ml-2 opacity-70 align-middle">
                         <FileText size={10} />
@@ -344,7 +427,7 @@ export default function VoicesPage() {
       {/* New/Edit Voice Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl w-full max-w-lg p-6 shadow-2xl animate-scale-up">
+          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl animate-scale-up">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
               <Sparkles className="text-blue-500" size={20} />
               {editingVoice ? '编辑音色' : '新建音色'}
@@ -361,7 +444,9 @@ export default function VoicesPage() {
                       checked={voiceType === 'clone'}
                       onChange={() => {
                         setVoiceType('clone');
-                        setTtsProvider('kokoro'); // Kokoro supports cloning well in our workspace
+                        if (!CLONE_PROVIDERS.some(p => p.id === ttsProvider)) {
+                          setTtsProvider('qwen');
+                        }
                       }}
                       className="accent-blue-600"
                     />
@@ -371,7 +456,12 @@ export default function VoicesPage() {
                     <input
                       type="radio"
                       checked={voiceType === 'standard'}
-                      onChange={() => setVoiceType('standard')}
+                      onChange={() => {
+                        setVoiceType('standard');
+                        if (!STANDARD_PROVIDERS.some(p => p.id === ttsProvider)) {
+                          setTtsProvider('edge');
+                        }
+                      }}
                       className="accent-blue-600"
                     />
                     <span>标准/内置音色 (配置底层参数)</span>
@@ -386,7 +476,7 @@ export default function VoicesPage() {
                 <input
                   type="text"
                   required
-                  placeholder="例如: 晓晓克隆、自定义男声"
+                  placeholder="例如: 温暖闺蜜、专属客服小王"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -423,22 +513,21 @@ export default function VoicesPage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider">
-                    TTS 服务商
+                    TTS 引擎 {voiceType === 'clone' ? '(仅展示支持克隆)' : '(内置预设)'}
                   </label>
                   <select
                     value={ttsProvider}
                     onChange={(e) => setTtsProvider(e.target.value)}
-                    className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none"
+                    className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-3 py-2.5 text-sm focus:outline-none"
                   >
-                    <option value="kokoro">Kokoro</option>
-                    <option value="edge">Edge TTS</option>
-                    <option value="qwen">Qwen TTS</option>
-                    <option value="voxcpm">VoxCPM</option>
-                    <option value="omni">OmniVoice</option>
-                    <option value="openrouter">OpenRouter</option>
+                    {(voiceType === 'clone' ? CLONE_PROVIDERS : STANDARD_PROVIDERS).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -449,13 +538,31 @@ export default function VoicesPage() {
                   <select
                     value={language}
                     onChange={(e) => setLanguage(e.target.value)}
-                    className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none"
+                    className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-3 py-2.5 text-sm focus:outline-none"
                   >
                     <option value="zh">中文 (zh)</option>
                     <option value="en">英文 (en)</option>
                     <option value="ja">日文 (ja)</option>
                     <option value="ko">韩文 (ko)</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider">
+                    声线性别
+                  </label>
+                  <select
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                    className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+                  >
+                    <option value="female">女声</option>
+                    <option value="male">男声</option>
+                    <option value="">未标注</option>
+                  </select>
+                  <p className="text-[10px] text-[var(--muted-text)] mt-1.5 leading-snug">
+                    决定卡片头像配色：女声粉、男声蓝、未标注灰
+                  </p>
                 </div>
               </div>
 
@@ -493,25 +600,71 @@ export default function VoicesPage() {
                   )}
                 </div>
               ) : (
-                <div>
-                  <label className="block text-xs font-bold text-[var(--muted-text)] mb-1.5 uppercase tracking-wider">
-                    参考音频文件 (WAV/MP3) {editingVoice ? '(选填，留空保持原音频)' : '*'}
-                  </label>
-                  <input
-                    type="file"
-                    accept="audio/*"
-                    required={voiceType === 'clone' && !editingVoice}
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files.length > 0) {
-                        setReferenceFile(e.target.files[0]);
-                      }
-                    }}
-                    className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2 text-sm focus:outline-none"
-                  />
-                  <p className="text-[10px] text-[var(--muted-text)] mt-1.5 flex items-start gap-1">
-                    <ShieldAlert size={12} className="mt-0.5 text-amber-500 shrink-0" />
-                    请上传时长在 5-15 秒左右的高清无杂音说话片段以获得最佳克隆效果。
-                  </p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-[var(--muted-text)] mb-1.5 uppercase tracking-wider">
+                      参考音频文件 (WAV/MP3) {editingVoice ? '(选填，留空保持原音频)' : '*'}
+                    </label>
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      required={voiceType === 'clone' && !editingVoice}
+                      onChange={handleRefAudioFileChange}
+                      className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2 text-sm focus:outline-none"
+                    />
+                    {refAudioPreviewUrl && (
+                      <div className="mt-2 p-3 bg-[var(--background)] border border-[var(--card-border)] rounded-xl">
+                        <span className="text-[10px] font-bold text-[var(--muted-text)] uppercase tracking-wider mb-1 block">
+                          参考音频在线试听
+                        </span>
+                        <audio src={refAudioPreviewUrl} controls className="w-full h-8" />
+                      </div>
+                    )}
+                    <p className="text-[10px] text-[var(--muted-text)] mt-1.5 flex items-start gap-1">
+                      <ShieldAlert size={12} className="mt-0.5 text-amber-500 shrink-0" />
+                      请上传 5-15 秒左右的高清无杂音说话片段以获得最佳克隆效果。
+                    </p>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-[var(--muted-text)] uppercase tracking-wider">
+                        参考音频文本 (REF TEXT) <span className="text-blue-500 font-semibold normal-case">（强烈建议填写）</span>
+                      </label>
+                      {isTranscribingRef && (
+                        <span className="text-xs text-blue-500 flex items-center gap-1">
+                          <span className="w-2.5 h-2.5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+                          SenseVoice 正在自动识别音频文字...
+                        </span>
+                      )}
+                    </div>
+                    <textarea
+                      rows={2}
+                      placeholder={isTranscribingRef ? "正在通过 SenseVoice 自动识别台词..." : "参考音频中说话的内容文本。上传音频后系统将自动识别，您也可以手动校对"}
+                      value={refText}
+                      onChange={(e) => setRefText(e.target.value)}
+                      className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+                    />
+                    <p className="text-[10px] text-[var(--muted-text)] mt-1 leading-relaxed">
+                      💡 为什么需要它？Qwen TTS 与 CosyVoice 依靠此文本与音频进行声学特征对齐。若不填写可能导致发音模糊、断句不准。
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider">
+                      语气/风格指令 (INSTRUCT) <span className="text-[10px] font-normal text-[var(--muted-text)]">（选填）</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="例如: A clear and natural speech. 或 亲切温暖、沉稳自信等"
+                      value={instruct}
+                      onChange={(e) => setInstruct(e.target.value)}
+                      className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                    <p className="text-[10px] text-[var(--muted-text)] mt-1">
+                      外部调用该音色时，将自动注入此语气风格指令
+                    </p>
+                  </div>
                 </div>
               )}
 

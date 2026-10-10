@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { BookmarkPlus, CheckCircle2, Sparkles, X } from 'lucide-react';
 import ModelLayout from '../shared/ModelLayout';
 import ApiExample from '../shared/ApiExample';
 
@@ -29,6 +30,15 @@ export default function QwenTTSPage({ selectedKey }: QwenTTSPageProps) {
   const [refAudioBase64, setRefAudioBase64] = useState<string | null>(null);
   const [refAudioUrl, setRefAudioUrl] = useState<string | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
+
+  // Save voice modal states
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [saveDesc, setSaveDesc] = useState('');
+  const [saveGender, setSaveGender] = useState('female');
+  const [saveLang, setSaveLang] = useState('zh');
+  const [isSavingVoice, setIsSavingVoice] = useState(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -80,6 +90,60 @@ export default function QwenTTSPage({ selectedKey }: QwenTTSPageProps) {
         URL.revokeObjectURL(refAudioUrl);
         setRefAudioUrl(null);
       }
+    }
+  };
+
+  const handleOpenSaveModal = () => {
+    setSaveName('');
+    setSaveDesc('');
+    setSaveGender('female');
+    setSaveLang('zh');
+    setShowSaveModal(true);
+  };
+
+  const handleSaveToVoices = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!saveName.trim()) {
+      alert('请填写音色名称');
+      return;
+    }
+    if (!refAudioBase64) {
+      alert('请先上传声音克隆的参考音频文件');
+      return;
+    }
+
+    setIsSavingVoice(true);
+    try {
+      const formData = new FormData();
+      formData.append('name', saveName.trim());
+      formData.append('description', saveDesc.trim() || '通过通义千问 Qwen TTS 克隆生成的固定音色');
+      formData.append('tts_provider', 'qwen');
+      formData.append('tts_voice', 'clone');
+      formData.append('language', saveLang);
+      formData.append('gender', saveGender);
+      formData.append('preview_text', text.trim());
+      formData.append('ref_text', refText.trim());
+      formData.append('instruct', instruct.trim());
+      formData.append('ref_audio_base64', refAudioBase64);
+
+      const res = await fetch('/admin/voices', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || '保存音色失败');
+      }
+
+      const savedVoice = await res.json();
+      setShowSaveModal(false);
+      setSaveSuccessMsg(`音色「${savedVoice.name}」已成功保存到音色管理！外部调用传 voice: "${savedVoice.id}" 即可`);
+      setTimeout(() => setSaveSuccessMsg(null), 6000);
+    } catch (err: any) {
+      alert(err.message || '保存失败');
+    } finally {
+      setIsSavingVoice(false);
     }
   };
 
@@ -223,9 +287,19 @@ export default function QwenTTSPage({ selectedKey }: QwenTTSPageProps) {
               />
               {refAudioUrl && (
                 <div className="mt-2 p-3 bg-[var(--background)] border border-[var(--card-border)] rounded-xl">
-                  <span className="text-[10px] font-bold text-[var(--muted-text)] uppercase tracking-wider mb-1 block">
-                    参考音频在线试听
-                  </span>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-bold text-[var(--muted-text)] uppercase tracking-wider block">
+                      参考音频在线试听
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleOpenSaveModal}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-blue-600/10 text-blue-600 hover:bg-blue-600 hover:text-white transition-all border border-blue-500/20"
+                    >
+                      <BookmarkPlus size={13} />
+                      保存为固定音色
+                    </button>
+                  </div>
                   <audio src={refAudioUrl} controls className="w-full h-8" />
                 </div>
               )}
@@ -293,15 +367,163 @@ export default function QwenTTSPage({ selectedKey }: QwenTTSPageProps) {
         </button>
         {audioUrl && (
           <div className="mt-6 p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl">
-            <label className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-2 block">
-              合成结果
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block">
+                合成结果
+              </label>
+              {mode === 'clone' && refAudioBase64 && (
+                <button
+                  type="button"
+                  onClick={handleOpenSaveModal}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-all shadow-sm shadow-blue-500/20 active:scale-95"
+                >
+                  <BookmarkPlus size={14} />
+                  一键保存为固定音色资产
+                </button>
+              )}
+            </div>
             <audio src={audioUrl} controls className="w-full h-10" />
           </div>
         )}
       </div>
 
       <ApiExample code={curlCode} />
+
+      {/* 一键保存为固定音色弹窗 */}
+      {showSaveModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl w-full max-w-lg p-6 shadow-2xl animate-scale-up">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <Sparkles className="text-blue-500" size={18} />
+                保存为固定音色资产
+              </h2>
+              <button
+                onClick={() => setShowSaveModal(false)}
+                className="text-[var(--muted-text)] hover:text-[var(--foreground)]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="text-xs text-[var(--muted-text)] mb-4">
+              将当前的参考音频、台词文本和语气指令保存至「音色管理」，生成专属音色 ID。外部系统通过标准 API 只需指定该 ID 即可随时复用。
+            </p>
+
+            <form onSubmit={handleSaveToVoices} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider">
+                  音色名称 *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="例如: 温暖闺蜜、专属客服小王"
+                  value={saveName}
+                  onChange={(e) => setSaveName(e.target.value)}
+                  className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider">
+                  音色描述
+                </label>
+                <input
+                  type="text"
+                  placeholder="一句话说明该音色的风格或用途"
+                  value={saveDesc}
+                  onChange={(e) => setSaveDesc(e.target.value)}
+                  className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider">
+                    主语言
+                  </label>
+                  <select
+                    value={saveLang}
+                    onChange={(e) => setSaveLang(e.target.value)}
+                    className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+                  >
+                    <option value="zh">中文 (zh)</option>
+                    <option value="en">英文 (en)</option>
+                    <option value="ja">日文 (ja)</option>
+                    <option value="ko">韩文 (ko)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider">
+                    声线性别
+                  </label>
+                  <select
+                    value={saveGender}
+                    onChange={(e) => setSaveGender(e.target.value)}
+                    className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+                  >
+                    <option value="female">女声</option>
+                    <option value="male">男声</option>
+                    <option value="">未标注</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider">
+                  已固化的参考台词 (REF TEXT)
+                </label>
+                <textarea
+                  rows={2}
+                  value={refText}
+                  onChange={(e) => setRefText(e.target.value)}
+                  placeholder="参考音频人物所说的台词"
+                  className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2 text-xs focus:outline-none resize-none opacity-85"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[var(--muted-text)] mb-1 uppercase tracking-wider">
+                  已固化的语气指令 (INSTRUCT)
+                </label>
+                <input
+                  type="text"
+                  value={instruct}
+                  onChange={(e) => setInstruct(e.target.value)}
+                  className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2 text-xs focus:outline-none opacity-85"
+                />
+              </div>
+
+              <div className="flex gap-3 justify-end pt-3 border-t border-[var(--card-border)]">
+                <button
+                  type="button"
+                  onClick={() => setShowSaveModal(false)}
+                  className="px-4 py-2 bg-[var(--background)] hover:bg-[var(--card-border)] border border-[var(--card-border)] rounded-xl text-sm font-semibold transition-all active:scale-95"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingVoice}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-all active:scale-95 shadow-lg shadow-blue-500/20 flex items-center gap-2"
+                >
+                  {isSavingVoice ? '保存中...' : '确认存入音色管理'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 成功浮层 Toast */}
+      {saveSuccessMsg && (
+        <div className="fixed bottom-6 right-6 z-[60] bg-emerald-600 text-white rounded-xl px-4 py-3 text-sm shadow-xl flex items-center gap-2 animate-fade-in">
+          <CheckCircle2 size={18} className="shrink-0" />
+          <span>{saveSuccessMsg}</span>
+        </div>
+      )}
     </ModelLayout>
   );
 }

@@ -167,6 +167,9 @@ class Database:
         new_v_columns = [
             ("preview_text", "TEXT"),
             ("tts_model", "TEXT"),
+            ("gender", "TEXT"),
+            ("ref_text", "TEXT"),
+            ("instruct", "TEXT"),
         ]
         for col_name, col_type in new_v_columns:
             if col_name not in v_columns:
@@ -178,15 +181,15 @@ class Database:
         cursor.execute("SELECT COUNT(*) FROM voices")
         if cursor.fetchone()[0] == 0:
             preset_voices = [
-                ("haruna", "晴奈音色", "治愈系日语女孩，用温暖甜美的声音和中文关心你。", "qwen", "serena", None, "zh", 1),
-                ("alex", "Alex音色", "硅谷专业英文男声，提供高强度全英文交流。", "edge", "en-US-GuyNeural", None, "en", 1),
-                ("morpheus", "墨菲斯音色", "沉稳睿智的中文男声，富有哲理与智慧。", "edge", "zh-CN-YunxiNeural", None, "zh", 1),
-                ("xiaoxiao", "晓晓音色", "温柔亲切的中文女声，适用于普通客服与日常交流。", "edge", "zh-CN-XiaoxiaoNeural", None, "zh", 1)
+                ("haruna", "晴奈音色", "治愈系日语女孩，用温暖甜美的声音和中文关心你。", "qwen", "serena", None, "zh", "female", 1),
+                ("alex", "Alex音色", "硅谷专业英文男声，提供高强度全英文交流。", "edge", "en-US-GuyNeural", None, "en", "male", 1),
+                ("morpheus", "墨菲斯音色", "沉稳睿智的中文男声，富有哲理与智慧。", "edge", "zh-CN-YunxiNeural", None, "zh", "male", 1),
+                ("xiaoxiao", "晓晓音色", "温柔亲切的中文女声，适用于普通客服与日常交流。", "edge", "zh-CN-XiaoxiaoNeural", None, "zh", "female", 1)
             ]
             for pv in preset_voices:
                 cursor.execute("""
-                    INSERT INTO voices (id, name, description, tts_provider, tts_voice, reference_audio, language, is_preset)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO voices (id, name, description, tts_provider, tts_voice, reference_audio, language, gender, is_preset)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, pv)
             self.conn.commit()
         else:
@@ -697,11 +700,14 @@ class Database:
 
     def save_custom_voice(self, voice_id: str, name: str, description: str, tts_provider: str, tts_voice: str,
                           reference_audio: str = None, language: str = "zh", preview_text: str = None,
-                          tts_model: str = None) -> dict:
+                          tts_model: str = None, gender: str = None, ref_text: str = None,
+                          instruct: str = None) -> dict:
+        if gender not in ("female", "male"):
+            gender = None
         cursor = self.conn.cursor()
         cursor.execute(
-            """INSERT INTO voices (id, name, description, tts_provider, tts_voice, reference_audio, language, preview_text, tts_model, is_preset)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            """INSERT INTO voices (id, name, description, tts_provider, tts_voice, reference_audio, language, preview_text, tts_model, gender, ref_text, instruct, is_preset)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                ON CONFLICT(id) DO UPDATE SET
                  name=excluded.name,
                  description=excluded.description,
@@ -710,8 +716,12 @@ class Database:
                  reference_audio=excluded.reference_audio,
                  language=excluded.language,
                  preview_text=excluded.preview_text,
-                 tts_model=excluded.tts_model""",
-            (voice_id, name, description, tts_provider, tts_voice, reference_audio, language, preview_text, tts_model)
+                 tts_model=excluded.tts_model,
+                 gender=excluded.gender,
+                 ref_text=excluded.ref_text,
+                 instruct=excluded.instruct""",
+            (voice_id, name, description, tts_provider, tts_voice, reference_audio, language, preview_text,
+             tts_model, gender, ref_text, instruct)
         )
         self.conn.commit()
         return self.get_voice(voice_id)

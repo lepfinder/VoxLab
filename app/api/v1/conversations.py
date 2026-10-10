@@ -279,6 +279,10 @@ async def save_custom_voice(
     language: Optional[str] = Form("zh"),
     preview_text: Optional[str] = Form(""),
     tts_model: Optional[str] = Form(None),
+    gender: Optional[str] = Form(None),
+    ref_text: Optional[str] = Form(None),
+    instruct: Optional[str] = Form(None),
+    ref_audio_base64: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None)
 ):
     import os
@@ -288,7 +292,23 @@ async def save_custom_voice(
     existing = db.get_voice(voice_id)
     reference_audio_path = existing.get("reference_audio") if existing else None
 
+    content = None
+    filename = None
     if file:
+        content = await file.read()
+        filename = file.filename
+    elif ref_audio_base64:
+        import base64
+        ref_data = ref_audio_base64
+        if "," in ref_data:
+            ref_data = ref_data.split(",", 1)[1]
+        try:
+            content = base64.b64decode(ref_data)
+        except Exception as e:
+            logger.error(f"Failed to decode ref_audio_base64: {e}")
+            content = None
+
+    if content:
         # Delete old file if it exists and is different
         if reference_audio_path and os.path.exists(reference_audio_path):
             try:
@@ -298,11 +318,39 @@ async def save_custom_voice(
         from config import CLONED_VOICES_DIR
         upload_dir = CLONED_VOICES_DIR
         os.makedirs(upload_dir, exist_ok=True)
-        file_ext = os.path.splitext(file.filename)[-1] or ".wav"
-        reference_audio_path = os.path.join(upload_dir, f"{voice_id}{file_ext}")
-        with open(reference_audio_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
+        target_wav_path = os.path.join(upload_dir, f"{voice_id}.wav")
+
+        import shutil
+        import subprocess
+        import tempfile
+        normalized = False
+        if shutil.which("ffmpeg"):
+            with tempfile.NamedTemporaryFile(delete=False) as raw_tmp:
+                raw_tmp.write(content)
+                raw_tmp_path = raw_tmp.name
+            try:
+                cmd = [
+                    "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                    "-i", raw_tmp_path,
+                    "-c:a", "pcm_s16le",
+                    target_wav_path
+                ]
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                if res.returncode == 0 and os.path.exists(target_wav_path) and os.path.getsize(target_wav_path) > 0:
+                    normalized = True
+                    reference_audio_path = target_wav_path
+            finally:
+                if os.path.exists(raw_tmp_path):
+                    try:
+                        os.remove(raw_tmp_path)
+                    except:
+                        pass
+
+        if not normalized:
+            file_ext = os.path.splitext(filename or "")[-1] or ".wav"
+            reference_audio_path = os.path.join(upload_dir, f"{voice_id}{file_ext}")
+            with open(reference_audio_path, "wb") as f:
+                f.write(content)
 
     saved = db.save_custom_voice(
         voice_id=voice_id,
@@ -313,7 +361,10 @@ async def save_custom_voice(
         reference_audio=reference_audio_path,
         language=language,
         preview_text=preview_text or None,
-        tts_model=tts_model or None
+        tts_model=tts_model or None,
+        gender=gender or None,
+        ref_text=ref_text or None,
+        instruct=instruct or None
     )
     return saved
 

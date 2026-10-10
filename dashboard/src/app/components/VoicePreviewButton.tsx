@@ -8,6 +8,7 @@ interface Voice {
   name: string;
   language: string;
   preview_text?: string | null;
+  gender?: string | null;
 }
 
 interface Props {
@@ -181,6 +182,13 @@ export default function VoicePreviewButton({ voice, defaultText }: Props) {
 
   const isPulsing = status === 'playing';
 
+  // 静止态按声线性别着色：女声粉、男声蓝、未标注中性灰
+  const idleTone = voice.gender === 'female'
+    ? 'bg-pink-500/10 border border-pink-500/25 text-pink-500 hover:bg-pink-500/20'
+    : voice.gender === 'male'
+    ? 'bg-blue-500/10 border border-blue-500/25 text-blue-600 hover:bg-blue-500/20'
+    : 'bg-[var(--foreground)]/[0.05] border border-[var(--card-border)] text-[var(--muted-text)] hover:bg-[var(--foreground)]/[0.1]';
+
   return (
     <button
       onClick={handleToggle}
@@ -197,7 +205,7 @@ export default function VoicePreviewButton({ voice, defaultText }: Props) {
             ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-500'
             : status === 'loading'
             ? 'bg-blue-500/15 border border-blue-500/30 text-blue-500'
-            : 'bg-blue-500/10 border border-blue-500/20 text-blue-600 hover:bg-blue-500/20'
+            : idleTone
         }`}
     >
       {/* 播放时脉冲动画 */}

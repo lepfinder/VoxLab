@@ -67,6 +67,24 @@ def _normalize_cache_loudness(path: str) -> None:
             os.remove(tmp_path)
 
 
+def _normalize_ref_audio_to_wav(input_path: str, output_path: str) -> bool:
+    """使用 ffmpeg 将参考音频转码为标准 16-bit PCM WAV，避免格式扩展名与实际编码不匹配导致模型解码失败。"""
+    if not shutil.which("ffmpeg"):
+        return False
+    try:
+        cmd = [
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+            "-i", input_path,
+            "-c:a", "pcm_s16le",
+            output_path,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        return result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 0
+    except Exception as e:
+        logger.warning(f"[TTS] 参考音频 WAV 规范化失败: {e}")
+        return False
+
+
 @router.post("/speech")
 async def speech(request_body: SpeechRequest, request: Request):
     from app.core.database import db
@@ -77,6 +95,10 @@ async def speech(request_body: SpeechRequest, request: Request):
     if voice_info:
         request_body.model = voice_info["tts_provider"]
         request_body.voice = voice_info["tts_voice"]
+        if not request_body.ref_text and voice_info.get("ref_text"):
+            request_body.ref_text = voice_info["ref_text"]
+        if not request_body.instruct and voice_info.get("instruct"):
+            request_body.instruct = voice_info["instruct"]
 
     request.state.model_name = request_body.model
     model_key = request_body.model.lower()
@@ -96,6 +118,28 @@ async def speech(request_body: SpeechRequest, request: Request):
             temp_ref_path = ref_path
             is_temp_ref_temporary = False
             logger.info(f"[TTS] Auto-loaded reference_audio from voice record: {ref_path}")
+            # 防呆：若参考音频存在但不是标准 WAV（如实际是 MP3/AAC），转码为临时规范 WAV 供模型消费
+            need_convert = False
+            try:
+                with open(ref_path, "rb") as f:
+                    header = f.read(12)
+                if not (header.startswith(b"RIFF") and header[8:12] == b"WAVE"):
+                    need_convert = True
+            except Exception:
+                pass
+            if need_convert:
+                norm_wav = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+                norm_wav_path = norm_wav.name
+                norm_wav.close()
+                if _normalize_ref_audio_to_wav(ref_path, norm_wav_path):
+                    temp_ref_path = norm_wav_path
+                    is_temp_ref_temporary = True
+                    logger.info(f"[TTS] Converted non-WAV reference_audio to standard WAV: {temp_ref_path}")
+                elif os.path.exists(norm_wav_path):
+                    try:
+                        os.remove(norm_wav_path)
+                    except:
+                        pass
 
     # ── TTS 日志追踪变量 ─────────────────────────────────────────────
     tts_start_time = time.time()
@@ -140,11 +184,33 @@ async def speech(request_body: SpeechRequest, request: Request):
             ref_data = ref_data.split(",", 1)[1]
         try:
             decoded_bytes = base64.b64decode(ref_data)
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-                tmp.write(decoded_bytes)
-                temp_ref_path = tmp.name
+            # 先将原始字节保存为临时文件，以便 ffmpeg 识别真实封装与音频流
+            with tempfile.NamedTemporaryFile(delete=False) as raw_tmp:
+                raw_tmp.write(decoded_bytes)
+                raw_tmp_path = raw_tmp.name
+
+            # 目标规范 WAV 文件（标准 16-bit PCM WAV）
+            wav_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+            wav_tmp_path = wav_tmp.name
+            wav_tmp.close()
+
+            if _normalize_ref_audio_to_wav(raw_tmp_path, wav_tmp_path):
+                temp_ref_path = wav_tmp_path
+                try:
+                    os.remove(raw_tmp_path)
+                except:
+                    pass
+            else:
+                # 若无 ffmpeg 或转换失败，以 raw 文件兜底
+                if os.path.exists(wav_tmp_path):
+                    try:
+                        os.remove(wav_tmp_path)
+                    except:
+                        pass
+                temp_ref_path = raw_tmp_path
+
             is_temp_ref_temporary = True
-            logger.info(f"[TTS] Decoded base64 ref_audio, saved to: {temp_ref_path}")
+            logger.info(f"[TTS] Decoded and normalized base64 ref_audio, saved to: {temp_ref_path}")
         except Exception as e:
             logger.error(f"[TTS] Failed to decode base64 ref_audio: {e}")
 
